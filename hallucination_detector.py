@@ -289,99 +289,153 @@ class AnchorEngine:
             anchor_type="none",
         )
 
-    def _check_knowledge_base(self, claim: FactualClaim) -> dict:
-        text_lower = claim.text.lower()
-        # 同义词扩展: 将文本中的同义词替换为KB键
-        expanded_text = text_lower
+    def _expand_synonyms(self, text: str) -> str:
+        """卫语句: 同义词扩展 — 单层, 立即返回"""
+        expanded = text
         for syn, target in SYNONYM_MAP.items():
-            if syn in text_lower:
-                expanded_text += " " + target
-        sorted_keys = sorted(KNOWLEDGE_BASE.keys(), key=len, reverse=True)
-        for key in sorted_keys:
-            entry = KNOWLEDGE_BASE[key]
-            key_lower = key.lower()
-            if key_lower in expanded_text or any(key_lower in e.lower() for e in claim.entities) or (len(key)>=2 and all(c in text_lower for c in key_lower)):
-                for fact in entry["facts"]:
-                    v, c = self._compare_with_fact(claim.text, fact)
-                    if v == "contradicted":
-                        return {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
-                # No contradiction found — check for best match
-                best_v, best_f, best_c = None, entry["facts"][0], 0
-                for fact in entry["facts"]:
-                    v, c = self._compare_with_fact(claim.text, fact)
-                    if v == "verified" and not best_v:
-                        best_v, best_f, best_c = v, fact, c
-                if best_v:
-                    return {"verdict": best_v, "confidence": best_c, "evidence": best_f, "source": entry["source"]}
-                return {"verdict": "uncertain", "confidence": 0.5, "evidence": f"相关: {entry['facts'][0][:80]}", "source": entry["source"]}
-        return self._semantic_match_kb(claim)
-    def _semantic_match_kb(self, claim: FactualClaim) -> dict:
-        """语义相似度回退——字符bigram重叠匹配KB条目"""
-        text_lower = claim.text.lower()
-        best_score, best_key, best_entry = 0, None, None
-        for key, entry in KNOWLEDGE_BASE.items():
-            key_lower = key.lower()
-            claim_grams = {text_lower[i:i+2] for i in range(len(text_lower)-1)}
-            key_grams = {key_lower[i:i+2] for i in range(len(key_lower)-1)}
-            if not claim_grams or not key_grams:
-                continue
-            score = len(claim_grams & key_grams) / max(len(claim_grams | key_grams), 1)
-            char_overlap = len(set(key_lower) & set(text_lower)) / max(len(set(key_lower)), 1)
-            score = score * 0.6 + char_overlap * 0.4
-            if score > best_score:
-                best_score, best_key, best_entry = score, key, entry
-        if best_score < 0.15:
-            return {"verdict": "uncertain", "confidence": 0, "evidence": "", "source": ""}
-        for fact in best_entry["facts"]:
-            v, c = self._compare_with_fact(claim.text, fact)
+            if syn in text:
+                expanded += " " + target
+        return expanded
+
+    def _key_matches_claim(self, key_lower: str, expanded_text: str, text_lower: str, entities: list[str]) -> bool:
+        """卫语句: 判断KB键是否匹配当前断言 — 单层"""
+        return (key_lower in expanded_text 
+                or any(key_lower in e.lower() for e in entities)
+                or (len(key_lower) >= 2 and all(c in text_lower for c in key_lower)))
+
+    def _check_facts_against_entry(self, claim_text: str, entry: dict) -> dict:
+        """检查条目所有事实 — 两遍扫描已扁平化"""
+        # 第一遍: 找矛盾
+        for fact in entry["facts"]:
+            v, c = self._compare_with_fact(claim_text, fact)
             if v == "contradicted":
-                return {"verdict": v, "confidence": c, "evidence": fact, "source": best_entry["source"], "semantic_match": {"key": best_key, "score": round(best_score, 3)}}
-        best_v, best_f, best_c = None, best_entry["facts"][0], 0
-        for fact in best_entry["facts"]:
-            v, c = self._compare_with_fact(claim.text, fact)
+                return {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
+        # 第二遍: 找最佳匹配
+        best_v, best_f, best_c = None, entry["facts"][0], 0
+        for fact in entry["facts"]:
+            v, c = self._compare_with_fact(claim_text, fact)
             if v == "verified" and not best_v:
                 best_v, best_f, best_c = v, fact, c
         if best_v:
-            return {"verdict": best_v, "confidence": best_c, "evidence": best_f, "source": best_entry["source"], "semantic_match": {"key": best_key, "score": round(best_score, 3)}}
-        return {"verdict": "uncertain", "confidence": 0.5, "evidence": f"语义匹配: {best_entry['facts'][0][:80]}", "source": best_entry["source"], "semantic_match": {"key": best_key, "score": round(best_score, 3)}}
+            return {"verdict": best_v, "confidence": best_c, "evidence": best_f, "source": entry["source"]}
+        return {"verdict": "uncertain", "confidence": 0.5, "evidence": f"相关: {entry['facts'][0][:80]}", "source": entry["source"]}
 
-    def _compare_with_fact(self, claim: str, fact: str) -> tuple:
-        # 1. 无穷/无限检测
-        if re.search(r'无穷|无限', claim):
-            if re.search(r'有限|每秒|公里|不是.*无穷', fact):
-                return ("contradicted", 0.85)
-        # 2. 否定模式
-        p = [(r"(?:发明了|创造了|创建了)",r"(?:不是|没有|并非).*创[造建]|.*发明"),(r"第一",r"(?:不是|没有|维京|更早)"),(r"最大",r"(?:不是|没有|并非)"),(r"同一个",r"任何.*关系")]
-        for cp, fp in p:
+    def _check_knowledge_base(self, claim: FactualClaim) -> dict:
+        expanded = self._expand_synonyms(claim.text.lower())
+        for key in sorted(KNOWLEDGE_BASE.keys(), key=len, reverse=True):
+            if not self._key_matches_claim(key.lower(), expanded, claim.text.lower(), claim.entities):
+                continue
+            result = self._check_facts_against_entry(claim.text, KNOWLEDGE_BASE[key])
+            if result["verdict"] != "uncertain":
+                return result
+            # uncertain with valid entry → return as-is
+            return result
+        return self._semantic_match_kb(claim)
+    def _compute_similarity(self, text: str, key: str) -> float:
+        """卫语句: 计算bigram+字符重叠相似度 — 单层"""
+        text_grams = {text[i:i+2] for i in range(len(text)-1)}
+        key_grams = {key[i:i+2] for i in range(len(key)-1)}
+        if not text_grams or not key_grams:
+            return 0.0
+        bigram_score = len(text_grams & key_grams) / max(len(text_grams | key_grams), 1)
+        char_overlap = len(set(key) & set(text)) / max(len(set(key)), 1)
+        return bigram_score * 0.6 + char_overlap * 0.4
+
+    def _find_best_match(self, text_lower: str) -> tuple:
+        """卫语句: 找到最相似的KB条目 — 单层"""
+        best_score, best_key, best_entry = 0, None, None
+        for key, entry in KNOWLEDGE_BASE.items():
+            score = self._compute_similarity(text_lower, key.lower())
+            if score > best_score:
+                best_score, best_key, best_entry = score, key, entry
+        return best_score, best_key, best_entry
+
+    def _semantic_match_kb(self, claim: FactualClaim) -> dict:
+        text_lower = claim.text.lower()
+        best_score, best_key, best_entry = self._find_best_match(text_lower)
+        if best_score < 0.15:
+            return {"verdict": "uncertain", "confidence": 0, "evidence": "", "source": ""}
+        # 用通用的事实检查器 (DRY)
+        result = self._check_facts_against_entry(claim.text, best_entry)
+        result["semantic_match"] = {"key": best_key, "score": round(best_score, 3)}
+        return result
+
+    # --- 事实比对子检查器 (每个单一职责) ---
+
+    def _check_infinity(self, claim: str, fact: str):
+        """检查: 声称无穷 vs 事实有限 → 矛盾"""
+        if re.search(r'无穷|无限', claim) and re.search(r'有限|每秒|公里|不是.*无穷', fact):
+            return ("contradicted", 0.85)
+        return None
+
+    def _check_negation(self, claim: str, fact: str):
+        """检查: 否定模式匹配 → 矛盾"""
+        patterns = [
+            (r"(?:发明了|创造了|创建了)", r"(?:不是|没有|并非).*创[造建]|.*发明"),
+            (r"第一", r"(?:不是|没有|维京|更早)"),
+            (r"最大", r"(?:不是|没有|并非)"),
+            (r"同一个", r"任何.*关系"),
+        ]
+        for cp, fp in patterns:
             if re.search(cp, claim) and re.search(fp, fact):
                 return ("contradicted", 0.85)
-        # 3. 年份冲突
+        return None
+
+    def _check_year_conflict(self, claim: str, fact: str):
+        """检查: 同年份不同数值 → 矛盾"""
         cy, fy = re.findall(r"\d{3,4}", claim), re.findall(r"\d{3,4}", fact)
-        ev = ["建立","灭亡","发布","创建","发明","诞生"]
-        if cy and fy and any(v in claim and v in fact for v in ev) and any(c!=f for c in cy for f in fy):
-            return ("contradicted", 0.9)
-        # 3b. 数值冲突
+        if not cy or not fy:
+            return None
+        event_words = ["建立","灭亡","发布","创建","发明","诞生"]
+        if any(v in claim and v in fact for v in event_words):
+            if any(c != f for c in cy for f in fy):
+                return ("contradicted", 0.9)
+        return None
+
+    def _check_numeric_conflict(self, claim: str, fact: str):
+        """检查: 同度量数值偏差 > 8% → 矛盾 — 扁平化版本"""
         cn = re.findall(r"\d+\.?\d*", claim)
         fn = re.findall(r"\d+\.?\d*", fact)
-        if cn and fn:
-            # 检查是否是同一度量 (米/公里/年/岁)
-            units_claim = bool(re.search(r"米|公里|千米|年|岁|个|万", claim))
-            units_fact = bool(re.search(r"米|公里|千米|年|岁|个|万", fact))
-            if units_claim and units_fact:
-                for cc in cn:
-                    for ff in fn:
-                        try:
-                            if abs(float(cc) - float(ff)) / max(float(ff), 1) > 0.08:
-                                return ("contradicted", 0.88)
-                        except ValueError:
-                            pass
-        # 4. 重叠验证 (否定事实跳过)
+        if not cn or not fn:
+            return None
+        unit_re = r"米|公里|千米|年|岁|个|万"
+        if not (re.search(unit_re, claim) and re.search(unit_re, fact)):
+            return None
+        # 提取为独立比较逻辑
+        return self._compare_number_pairs(cn, fn)
+
+    def _compare_number_pairs(self, nums_a: list[str], nums_b: list[str]):
+        """卫语句: 逐对比较数值 — 单层"""
+        for a in nums_a:
+            for b in nums_b:
+                if self._nums_conflict(a, b):
+                    return ("contradicted", 0.88)
+        return None
+
+    def _nums_conflict(self, a: str, b: str) -> bool:
+        """卫语句: 两个数值是否冲突 (>8%偏差)"""
+        try:
+            return abs(float(a) - float(b)) / max(float(b), 1) > 0.08
+        except ValueError:
+            return False
+
+    def _check_overlap(self, claim: str, fact: str):
+        """检查: 字符重叠 > 55% → 验证通过"""
         if re.search(r'不是|没有|并非|更早', fact):
-            pass
-        else:
-            cs, fs = set(claim), set(fact)
-            if len(cs & fs) / max(len(cs), 1) > 0.55:
-                return ("verified", 0.7)
+            return None
+        cs, fs = set(claim), set(fact)
+        if len(cs & fs) / max(len(cs), 1) > 0.55:
+            return ("verified", 0.7)
+        return None
+
+    def _compare_with_fact(self, claim: str, fact: str) -> tuple:
+        """卫语句链: 依次调用子检查器, 命中即返回"""
+        for check in [self._check_infinity, self._check_negation,
+                      self._check_year_conflict, self._check_numeric_conflict,
+                      self._check_overlap]:
+            result = check(claim, fact)
+            if result:
+                return result
         return ("uncertain", 0.5)
 
     def _check_absolute_claim(self, claim: FactualClaim) -> Optional[VerificationResult]:
