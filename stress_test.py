@@ -232,7 +232,7 @@ def main():
         with urlopen(req, timeout=5) as resp:
             health = json.loads(resp.read())
             print(f"  ✅ 网关在线: {health.get('status', '?')}")
-    except Exception as e:
+    except (URLError, OSError, json.JSONDecodeError, ValueError) as e:
         print(f"  ❌ 无法连接到网关 {base_url}: {e}")
         print(f"  请先启动网关:")
         print(f"    python3 awareness_gateway.py --port {args.port} --mock &")

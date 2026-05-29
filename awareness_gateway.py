@@ -389,7 +389,7 @@ def detect_upstream_type(api_url: str, api_key: str) -> str:
             data = json.loads(resp.read())
             if "models" in data:
                 return "ollama"
-    except Exception:
+    except (URLError, OSError, json.JSONDecodeError, ValueError):
         pass
     # 探测 OpenAI 兼容
     try:
@@ -398,7 +398,7 @@ def detect_upstream_type(api_url: str, api_key: str) -> str:
             data = json.loads(resp.read())
             if "data" in data or "object" in data:
                 return "openai"
-    except Exception:
+    except (URLError, OSError, json.JSONDecodeError, ValueError):
         pass
     return "unknown"
 
@@ -722,7 +722,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 try:
                     detected = detect_upstream_type(self.api_url, self.api_key)
                     upstream_status = "connected" if detected != "unknown" else "unreachable"
-                except Exception:
+                except (URLError, OSError, ValueError):
                     upstream_status = "unreachable"
             self._send_json({
                 "status": "ok",
