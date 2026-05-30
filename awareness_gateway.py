@@ -34,6 +34,13 @@ from urllib.error import URLError, HTTPError
 from urllib.parse import urlparse
 from collections import deque
 
+try:
+    from logger import log
+except ImportError:
+    class _NoopLog:
+        def __getattr__(self, _): return lambda *a, **k: None
+    log = _NoopLog()
+
 # 可选: 幻觉检测集成
 try:
     sys.path.insert(0, '/data/data/com.termux/files/home')
@@ -487,90 +494,105 @@ def call_upstream(api_url: str, api_key: str, model: str,
 
 
 def _do_streaming_call(endpoint: str, headers: dict, body: dict,
-                       observer: Observer, upstream_type: str) -> dict:
-    """执行流式调用并逐段观察"""
+                       observer: Observer, upstream_type: str,
+                       timeout: float = 30.0) -> dict:
+    """执行流式调用并逐段观察 (带超时保护)"""
     full_response = ""
     observations = []
     splitter = SemanticSplitter()
+    t0 = time.time()
 
     req = Request(endpoint, data=json.dumps(body).encode(),
                  headers=headers, method="POST")
 
-    with urlopen(req, timeout=120) as resp:
-        for line in resp:
-            line = line.decode("utf-8", errors="replace").strip()
-            if not line:
-                continue
-
-            # 解析响应行 (兼容两种格式)
-            if upstream_type == "ollama":
-                # Ollama: 裸 NDJSON, 每行一个完整 JSON
-                payload = line
-            else:
-                # OpenAI: SSE 格式 "data: {...}"
-                if not line.startswith("data: "):
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            for line in resp:
+                line = line.decode("utf-8", errors="replace").strip()
+                if not line:
                     continue
-                payload = line[6:]
-                if payload == "[DONE]":
-                    break
 
-            try:
-                chunk = json.loads(payload)
-            except json.JSONDecodeError:
-                continue
+                # 解析响应行 (兼容两种格式)
+                if upstream_type == "ollama":
+                    payload = line
+                else:
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:]
+                    if payload == "[DONE]":
+                        break
 
-            # === 双格式内容提取 ===
-            content = ""
-            if upstream_type == "ollama":
-                # Ollama: {"message":{"content":"..."},"done":false}
-                msg = chunk.get("message", {})
-                content = msg.get("content", "")
-                if chunk.get("done"):
-                    break
-            else:
-                # OpenAI: {"choices":[{"delta":{"content":"..."}}]}
                 try:
-                    content = chunk["choices"][0]["delta"].get("content", "")
-                except (KeyError, IndexError):
-                    # 可能是非流式响应被错误地返回
+                    chunk = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+
+                content = ""
+                if upstream_type == "ollama":
+                    msg = chunk.get("message", {})
+                    content = msg.get("content", "")
+                    if chunk.get("done"):
+                        break
+                else:
                     try:
-                        content = chunk["choices"][0]["message"].get("content", "")
+                        content = chunk["choices"][0]["delta"].get("content", "")
                     except (KeyError, IndexError):
-                        pass
+                        try:
+                            content = chunk["choices"][0]["message"].get("content", "")
+                        except (KeyError, IndexError):
+                            pass
 
-            if not content:
-                continue
+                if not content:
+                    continue
 
-            full_response += content
-            seg = splitter.feed(content)
-            if seg:
-                obs = observer.observe(seg)
-                if obs.get("interrupt") or obs.get("flags"):
-                    obs["segment"] = seg
-                    observations.append(obs)
+                full_response += content
+                seg = splitter.feed(content)
+                if seg:
+                    obs = observer.observe(seg)
+                    if obs.get("interrupt") or obs.get("flags"):
+                        obs["segment"] = seg
+                        observations.append(obs)
 
-    # 残余
-    if splitter.buffer.strip():
-        obs = observer.observe(splitter.buffer.strip())
-        if obs.get("interrupt") or obs.get("flags"):
-            obs["segment"] = splitter.buffer.strip()
-            observations.append(obs)
+        # 残余
+        if splitter.buffer.strip():
+            obs = observer.observe(splitter.buffer.strip())
+            if obs.get("interrupt") or obs.get("flags"):
+                obs["segment"] = splitter.buffer.strip()
+                observations.append(obs)
 
+    except (URLError, OSError, TimeoutError) as e:
+        elapsed = (time.time() - t0) * 1000
+        log.warn("upstream streaming timeout", elapsed_ms=round(elapsed),
+                 error=str(e)[:60])
+        return _build_timeout_result(full_response, observations, elapsed)
+
+    elapsed = (time.time() - t0) * 1000
+    prompt_len = len(body.get("messages", []))
+    log.info("inference complete", duration_ms=round(elapsed),
+             prompt_turns=prompt_len, upstream=upstream_type)
     return _build_result(full_response, observations)
 
 
 def _do_nonstreaming_call(endpoint: str, headers: dict, body: dict,
-                          observer: Observer, upstream_type: str) -> dict:
-    """非流式降级调用"""
+                          observer: Observer, upstream_type: str,
+                          timeout: float = 60.0) -> dict:
+    """非流式降级调用 (带超时保护)"""
     full_response = ""
     observations = []
     splitter = SemanticSplitter()
+    t0 = time.time()
 
     req = Request(endpoint, data=json.dumps(body).encode(),
                  headers=headers, method="POST")
 
-    with urlopen(req, timeout=120) as resp:
-        raw = json.loads(resp.read())
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = json.loads(resp.read())
+    except (URLError, OSError, TimeoutError, json.JSONDecodeError) as e:
+        elapsed = (time.time() - t0) * 1000
+        log.warn("upstream non-streaming timeout", elapsed_ms=round(elapsed),
+                 error=str(e)[:60])
+        return _build_timeout_result(full_response, observations, elapsed)
 
     # 提取内容
     if upstream_type == "ollama":
@@ -581,7 +603,6 @@ def _do_nonstreaming_call(endpoint: str, headers: dict, body: dict,
         except (KeyError, IndexError):
             full_response = ""
 
-    # 对整个响应逐段观察
     for char in full_response:
         seg = splitter.feed(char)
         if seg:
@@ -590,8 +611,27 @@ def _do_nonstreaming_call(endpoint: str, headers: dict, body: dict,
                 obs["segment"] = seg
                 observations.append(obs)
 
+    elapsed = (time.time() - t0) * 1000
+    prompt_len = len(body.get("messages", []))
+    log.info("inference complete (non-streaming)", duration_ms=round(elapsed),
+             prompt_turns=prompt_len, upstream=upstream_type)
     return _build_result(full_response, observations)
 
+
+def _build_timeout_result(partial: str, observations: list, elapsed_ms: float) -> dict:
+    """超时降级响应 — 用户可读, 网关不崩溃"""
+    fallback_msg = "[上游响应超时, 请稍后重试]"
+    display = (partial + fallback_msg) if partial else fallback_msg
+    return {
+        "response": display,
+        "observations": observations,
+        "flags": [],
+        "status": "timeout",
+        "interruptions": 0,
+        "_timeout": True,
+        "_partial": bool(partial),
+        "_elapsed_ms": round(elapsed_ms),
+    }
 
 def _build_result(full_response: str, observations: list) -> dict:
     """统一构建返回结构"""
