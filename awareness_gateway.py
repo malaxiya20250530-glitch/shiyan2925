@@ -27,8 +27,9 @@ import re
 import sys
 import time
 import argparse
+import os
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlparse
@@ -655,6 +656,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
     conversations = {}  # session_id → list of turns
     request_log = deque(maxlen=50)  # 最近请求日志
     alignment_analyzer = None  # lazy init
+    MAX_CONCURRENT = int(os.getenv("MAX_CONCURRENT", "20"))
+    _semaphore = threading.Semaphore(MAX_CONCURRENT)
 
     def log_message(self, format, *args):
         print(f"[{time.strftime('%H:%M:%S')}] {args[0]}", file=sys.stderr)
@@ -810,6 +813,13 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 }
                 self._send_json({"added": key, "facts": len(body.get("facts", []))})
             return
+        if path == "/config/concurrent":
+            body = self._read_body()
+            new_limit = int(body.get("limit", 20))
+            type(self)._semaphore = threading.Semaphore(new_limit)
+            type(self).MAX_CONCURRENT = new_limit
+            self._send_json({"status": "ok", "max_concurrent": new_limit})
+            return
         if path == "/analyze":
             # 仅分析文本，不调用 LLM
             body = self._read_body()
@@ -840,6 +850,9 @@ class GatewayHandler(BaseHTTPRequestHandler):
             })
 
         elif path == "/v1/chat/completions":
+            if not self._semaphore.acquire(blocking=False):
+                self._send_json({"error":"Too Many Requests","message":f"Server at capacity (max {self.MAX_CONCURRENT} concurrent)","retry_after":1}, code=429)
+                return
             body = self._read_body()
             messages = body.get("messages", [])
             max_tokens = body.get("max_tokens", 512)
@@ -921,6 +934,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body_bytes)))
             self.end_headers()
             self.wfile.write(body_bytes)
+            self._semaphore.release()
 
         else:
             self._send_json({"error": "not found"}, 404)
@@ -958,7 +972,7 @@ def main():
     GatewayHandler.mock_mode = args.mock
     GatewayHandler.upstream_type = args.upstream_type
 
-    server = HTTPServer(("0.0.0.0", args.port), GatewayHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), GatewayHandler)
 
     print(f"""
 ╔══════════════════════════════════════════════════╗
@@ -969,6 +983,7 @@ def main():
 ║  上游:    {args.upstream}
 ║  模型:    {args.model}
 ║  敏感度:  {args.sensitivity}
+    print(f"║  并发上限: {GatewayHandler.MAX_CONCURRENT}\")
 ╠══════════════════════════════════════════════════╣
 ║  编译通道: LLM = 肌肉记忆  |  觉察通道: 观察器 = 走神空间       ║
 ║  POST /analyze              → 仅分析文本          ║
