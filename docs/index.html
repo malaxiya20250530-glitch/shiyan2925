@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>觉察推理网关</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; background: #0d1117; color: #c9d1d9; }
+  h1 { color: #58a6ff; }
+  h2 { color: #f0f6fc; border-bottom: 1px solid #30363d; padding-bottom: .3em; }
+  code { background: #161b22; padding: .2em .4em; border-radius: 4px; font-size: 90%; }
+  pre { background: #161b22; padding: 1em; border-radius: 8px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #30363d; padding: .5em .8em; text-align: left; }
+  th { background: #21262d; }
+  a { color: #58a6ff; }
+  .badge { display: inline-block; padding: .25em .6em; border-radius: 1em; font-size: 85%; margin-right: .5em; }
+  .badge-green { background: #238636; color: #fff; }
+  .badge-blue { background: #1f6feb; color: #fff; }
+</style>
+</head>
+<body>
+
+<h1>🛡️ 觉察推理网关</h1>
+<p>LLM 幻觉检测透明代理 — 夹在用户与 LLM 之间，实时拦截虚假信息。</p>
+
+<p>
+  <span class="badge badge-green">82 测试通过</span>
+  <span class="badge badge-blue">v2.2.0</span>
+</p>
+
+<h2>快速开始</h2>
+<pre><code>pip install git+https://github.com/malaxiya20250530-glitch/shiyan2925.git</code></pre>
+
+<h3>对接 Ollama</h3>
+<pre><code>ollama serve
+awareness-gateway --port 8800 --upstream http://localhost:11434/v1 --model llama3.2</code></pre>
+
+<h3>对接 OpenAI</h3>
+<pre><code>awareness-gateway --port 8800 --upstream https://api.openai.com/v1 --api-key sk-xxx --model gpt-4o</code></pre>
+
+<h3>Mock 模式（无需 LLM）</h3>
+<pre><code>awareness-gateway --port 8800 --mock</code></pre>
+
+<h2>API 端点</h2>
+<table>
+<tr><th>端点</th><th>方法</th><th>说明</th></tr>
+<tr><td><code>/health</code></td><td>GET</td><td>健康检查</td></tr>
+<tr><td><code>/v1/chat/completions</code></td><td>POST</td><td>OpenAI 兼容聊天接口</td></tr>
+<tr><td><code>/api/chat</code></td><td>POST</td><td>Ollama 兼容聊天接口</td></tr>
+<tr><td><code>/ocr</code></td><td>POST</td><td>OCR 截图检测</td></tr>
+<tr><td><code>/uncertain</code></td><td>GET</td><td>不确定样本审核面板</td></tr>
+<tr><td><code>/feedback</code></td><td>GET</td><td>反馈复核面板</td></tr>
+</table>
+
+<h2>检测管道</h2>
+<pre><code>用户输入 → 责任链检查器 → 向量语义检索 → 联网交叉验证 → 结果</code></pre>
+<ul>
+  <li><strong>责任链</strong>：快速否定、年份冲突、数值矛盾、来源缺失</li>
+  <li><strong>向量检索</strong>：BM25 + TF-IDF 混合检索知识库</li>
+  <li><strong>联网验证</strong>：DuckDuckGo + Wikipedia 并行交叉验证</li>
+</ul>
+
+<h2>模块</h2>
+<table>
+<tr><th>模块</th><th>说明</th></tr>
+<tr><td><code>hallucination_detector.py</code></td><td>核心幻觉检测</td></tr>
+<tr><td><code>awareness_gateway.py</code></td><td>HTTP 网关（双协议）</td></tr>
+<tr><td><code>vector_kb.py</code></td><td>向量知识库（BM25+TF-IDF）</td></tr>
+<tr><td><code>web_verifier.py</code></td><td>联网交叉验证</td></tr>
+<tr><td><code>feedback_dashboard.py</code></td><td>Web 仪表盘</td></tr>
+<tr><td><code>encrypt_source.py</code></td><td>源码加密工具</td></tr>
+</table>
+
+<h2>配置</h2>
+<pre><code>{
+  "port": 8800,
+  "upstream_url": "http://localhost:11434/v1",
+  "model": "llama3.2",
+  "mock_mode": false
+}</code></pre>
+
+<p><a href="https://github.com/malaxiya20250530-glitch/shiyan2925">GitHub 仓库 →</a></p>
+</body>
+</html>
