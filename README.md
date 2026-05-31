@@ -1,4 +1,4 @@
-[![测试](https://github.com/xianyu110/awesome-openclaw-tutorial/actions/workflows/test.yml/badge.svg)](https://github.com/xianyu110/awesome-openclaw-tutorial/actions)
+[![测试](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/test.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
 
 # 觉察推理网关 · Awareness Gateway
 
