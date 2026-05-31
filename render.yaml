@@ -1,0 +1,35 @@
+# Render Blueprint — 觉察推理网关
+# 免费套餐: 512MB RAM, 750h/月, 自动 HTTPS
+# 部署: 推送此文件到 GitHub → Render Dashboard → New Blueprint
+
+services:
+  # ── 主网关 (Web Service) ──
+  - type: web
+    name: awareness-gateway
+    env: python
+    region: singapore  # 亚洲低延迟
+    plan: free
+    buildCommand: |
+      rm -f feedback.db web_cache.db
+      python3 -c "import feedback_store; feedback_store.init_db()"
+    startCommand: python3 awareness_gateway.py --port $PORT --mock
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # ── 仪表盘 (可选) ──
+  - type: web
+    name: awareness-dashboard
+    env: python
+    region: singapore
+    plan: free
+    startCommand: python3 feedback_dashboard.py --port $PORT
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /
+    autoDeploy: false  # 手动部署节省免费额度
