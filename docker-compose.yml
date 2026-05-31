@@ -1,18 +1,28 @@
 version: "3.8"
 
 services:
+  # ── 主网关 ──
   gateway:
     build: .
     ports:
       - "8800:8800"
     volumes:
       - ./feedback.db:/app/feedback.db
+      - ./web_cache.db:/app/web_cache.db
       - ./kb_user.json:/app/kb_user.json
-      - ./awareness_gateway.log:/app/awareness_gateway.log
+      - ./consensus_model.json:/app/consensus_model.json
+      - ./traces.jsonl:/app/traces.jsonl
     environment:
       - PYTHONUNBUFFERED=1
+    command: ["--mock"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8800/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
+  # ── 仪表盘 ──
   dashboard:
     build: .
     ports:
@@ -22,3 +32,55 @@ services:
     entrypoint: ["python3", "feedback_dashboard.py"]
     command: ["--port", "8801"]
     restart: unless-stopped
+
+  # ── Prometheus 指标导出 ──
+  metrics:
+    build: .
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./feedback.db:/app/feedback.db
+    entrypoint: ["python3", "-c"]
+    command:
+      - |
+        from http.server import HTTPServer, BaseHTTPRequestHandler
+        from prometheus_exporter import get_registry
+        reg = get_registry()
+        class M(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type","text/plain")
+                self.end_headers()
+                self.wfile.write(reg.render_all().encode())
+        HTTPServer(("0.0.0.0",9090), M).serve_forever()
+    restart: unless-stopped
+
+  # ── Prometheus ──
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+
+  # ── Grafana ──
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

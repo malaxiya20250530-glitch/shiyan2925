@@ -299,8 +299,8 @@ class HybridRetriever:
         w_vec = 1.0 - self.bm25_weight
 
         # 归一化各分数到 [0, 1]
-        max_bm = max([s for _, s in bm25_results.values()], default=1.0)
-        max_vec = max([s for _, s in vec_results.values()], default=1.0)
+        max_bm = max([s for _, s in bm25_results.values()], default=1.0) or 1.0
+        max_vec = max([s for _, s in vec_results.values()], default=1.0) or 1.0
 
         for key in all_keys:
             bm_s = (bm25_results[key][1] / max_bm) if key in bm25_results else 0.0

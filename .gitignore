@@ -26,3 +26,5 @@ _encrypt_key.bak
 # 系统
 .DS_Store
 Thumbs.db
+.cargo/
+.codex/
