@@ -293,10 +293,24 @@ class AwarenessInjector:
 # 主分析器
 # ============================================================
 
+def _load_config():
+    """Load configuration from config.json, return dict or empty dict on failure."""
+    from pathlib import Path
+    try:
+        with open(Path(__file__).parent / "config.json") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
 class AlignmentAnalyzer:
     """社会对齐主分析器"""
 
     def __init__(self, security_level: str = "balanced"):
+        config = _load_config()
+        sa_cfg = config.get("social_alignment", {})
+        if security_level == "balanced":
+            security_level = sa_cfg.get("security_level", "balanced")
         self.emotion_detector = EmotionDetector()
         self.pressure_detector = PressureDetector()
         self.drift_tracker = DriftTracker()

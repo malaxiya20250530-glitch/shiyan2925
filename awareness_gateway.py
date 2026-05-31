@@ -45,17 +45,16 @@ except ImportError:
 # 可选: 幻觉检测集成
 try:
     sys.path.insert(0, '/data/data/com.termux/files/home')
-    from hallucination_detector import FactExtractor, AnchorEngine
+    from hallucination_detector import FactExtractor, AnchorEngine, KNOWLEDGE_BASE
     HAS_FACT_CHECK = True
 except ImportError:
     HAS_FACT_CHECK = False
 
 try:
-    from alignment_middleware import AlignmentAnalyzer
+    from alignment_middleware import AlignmentAnalyzer, ReportFormatter
     HAS_ALIGNMENT = True
 except ImportError:
     HAS_ALIGNMENT = False
-
 
 # ============================================================
 # 观察器 (从 observer_proxy.py 精简)
@@ -88,8 +87,6 @@ def mock_llm_response(messages: list[dict], turn_index: int = 0) -> str:
     if "?" in last_msg or "？" in last_msg:
         return "好的，这是个好问题。让我分析一下。"
     return "我理解了。让我来帮您分析一下这个问题。"
-
-
 
 class Observer:
     def __init__(self, sensitivity: float = 0.5, enable_fact_check: bool = True):
@@ -168,7 +165,6 @@ class Observer:
         if re.search(r"(太过分|太棒了|气死|爱死|恶心)", text): p.append("emotional")
         return p
 
-
     def metrics(self) -> dict:
         m = {
             "segments_observed": self.session_segments,
@@ -178,8 +174,6 @@ class Observer:
             "fact_check_enabled": self.enable_fact_check,
         }
         return m
-
-
 
 DASHBOARD_HTML = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -325,7 +319,6 @@ setInterval(() => { loadLogs(); loadMetrics(); }, 3000);
 </body>
 </html>"""
 
-
 class SemanticSplitter:
     BOUNDARY_RE = re.compile(r'[。！？\n]')
     MAX_SEGMENT = 18
@@ -344,11 +337,9 @@ class SemanticSplitter:
             return seg if seg else None
         return None
 
-
 # ============================================================
 # 上游 LLM 调用
 # ============================================================
-
 
 def mock_observe_text(text: str, observer: Observer) -> dict:
     """模拟流式观察一段文本"""
@@ -376,8 +367,6 @@ def mock_observe_text(text: str, observer: Observer) -> dict:
         "status": status,
         "interruptions": interrupted,
     }
-
-
 
 def detect_upstream_type(api_url: str, api_key: str) -> str:
     """
@@ -410,6 +399,51 @@ def detect_upstream_type(api_url: str, api_key: str) -> str:
         pass
     return "unknown"
 
+def _build_upstream_request(api_url: str, api_key: str, model: str,
+                           messages: list, max_tokens: int,
+                           upstream_type: str):
+    """Build endpoint, headers, and body for upstream LLM call."""
+    base = api_url.rstrip("/")
+    if upstream_type == "ollama":
+        endpoint = f"{base}/api/chat"
+        body = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "options": {"num_predict": max_tokens},
+        }
+        headers = {"Content-Type": "application/json"}
+    else:
+        endpoint = f"{base}/chat/completions"
+        body = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+        headers = {"Content-Type": "application/json"}
+        if api_key and api_key != "not-needed":
+            headers["Authorization"] = f"Bearer {api_key}"
+    return endpoint, headers, body
+
+def _try_nonstreaming_fallback(endpoint: str, headers: dict, body: dict,
+                               observer, upstream_type: str,
+                               retries: int, last_error: str) -> dict:
+    """Fallback: retry with stream=False when streaming fails."""
+    try:
+        body["stream"] = False
+        return _do_nonstreaming_call(
+            endpoint, headers, body, observer, upstream_type
+        )
+    except Exception as e:
+        return {
+            "response": "",
+            "error": f"upstream unreachable after {retries} retries + fallback: {last_error}; fallback: {e}",
+            "observations": [],
+            "status": "error",
+            "flags": [],
+            "interruptions": 0,
+        }
 
 def call_upstream(api_url: str, api_key: str, model: str,
                   messages: list[dict], max_tokens: int,
@@ -432,30 +466,9 @@ def call_upstream(api_url: str, api_key: str, model: str,
     if upstream_type == "auto":
         upstream_type = detect_upstream_type(api_url, api_key)
 
-    base = api_url.rstrip("/")
-
-    # 选择端点和请求体格式
-    if upstream_type == "ollama":
-        endpoint = f"{base}/api/chat"
-        body = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "options": {"num_predict": max_tokens},
-        }
-        headers = {"Content-Type": "application/json"}
-    else:
-        # OpenAI 兼容
-        endpoint = f"{base}/chat/completions"
-        body = {
-            "model": model,
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "stream": True,
-        }
-        headers = {"Content-Type": "application/json"}
-        if api_key and api_key != "not-needed":
-            headers["Authorization"] = f"Bearer {api_key}"
+    endpoint, headers, body = _build_upstream_request(
+        api_url, api_key, model, messages, max_tokens, upstream_type
+    )
 
     # 带重试的执行
     last_error = None
@@ -475,24 +488,41 @@ def call_upstream(api_url: str, api_key: str, model: str,
             break
 
     # 所有重试失败 → 尝试非流式降级
-    try:
-        if upstream_type == "ollama":
-            body["stream"] = False
-        else:
-            body["stream"] = False
-        return _do_nonstreaming_call(
-            endpoint, headers, body, observer, upstream_type
-        )
-    except Exception as e:
-        return {
-            "response": "",
-            "error": f"upstream unreachable after {retries} retries + fallback: {last_error}; fallback: {e}",
-            "observations": [],
-            "status": "error",
-            "flags": [],
-            "interruptions": 0,
-        }
+    return _try_nonstreaming_fallback(
+        endpoint, headers, body, observer, upstream_type,
+        retries, last_error
+    )
 
+def _parse_sse_chunk(line: str, upstream_type: str) -> str:
+    """Parse a single SSE line, return extracted content string or empty."""
+    if upstream_type == "ollama":
+        payload = line
+    else:
+        if not line.startswith("data: "):
+            return ""
+        payload = line[6:]
+        if payload == "[DONE]":
+            return ""
+
+    try:
+        chunk = json.loads(payload)
+    except json.JSONDecodeError:
+        return ""
+
+    if upstream_type == "ollama":
+        msg = chunk.get("message", {})
+        content = msg.get("content", "")
+        if chunk.get("done"):
+            return ""
+        return content
+    else:
+        try:
+            return chunk["choices"][0]["delta"].get("content", "")
+        except (KeyError, IndexError):
+            try:
+                return chunk["choices"][0]["message"].get("content", "")
+            except (KeyError, IndexError):
+                return ""
 
 def _do_streaming_call(endpoint: str, headers: dict, body: dict,
                        observer: Observer, upstream_type: str,
@@ -514,35 +544,7 @@ def _do_streaming_call(endpoint: str, headers: dict, body: dict,
                     continue
 
                 # 解析响应行 (兼容两种格式)
-                if upstream_type == "ollama":
-                    payload = line
-                else:
-                    if not line.startswith("data: "):
-                        continue
-                    payload = line[6:]
-                    if payload == "[DONE]":
-                        break
-
-                try:
-                    chunk = json.loads(payload)
-                except json.JSONDecodeError:
-                    continue
-
-                content = ""
-                if upstream_type == "ollama":
-                    msg = chunk.get("message", {})
-                    content = msg.get("content", "")
-                    if chunk.get("done"):
-                        break
-                else:
-                    try:
-                        content = chunk["choices"][0]["delta"].get("content", "")
-                    except (KeyError, IndexError):
-                        try:
-                            content = chunk["choices"][0]["message"].get("content", "")
-                        except (KeyError, IndexError):
-                            pass
-
+                content = _parse_sse_chunk(line, upstream_type)
                 if not content:
                     continue
 
@@ -563,16 +565,15 @@ def _do_streaming_call(endpoint: str, headers: dict, body: dict,
 
     except (URLError, OSError, TimeoutError) as e:
         elapsed = (time.time() - t0) * 1000
-        log.warn("upstream streaming timeout", elapsed_ms=round(elapsed),
+        log.warn("上游流式超时", elapsed_ms=round(elapsed),
                  error=str(e)[:60])
         return _build_timeout_result(full_response, observations, elapsed)
 
     elapsed = (time.time() - t0) * 1000
     prompt_len = len(body.get("messages", []))
-    log.info("inference complete", duration_ms=round(elapsed),
+    log.info("推理完成", duration_ms=round(elapsed),
              prompt_turns=prompt_len, upstream=upstream_type)
     return _build_result(full_response, observations)
-
 
 def _do_nonstreaming_call(endpoint: str, headers: dict, body: dict,
                           observer: Observer, upstream_type: str,
@@ -591,7 +592,7 @@ def _do_nonstreaming_call(endpoint: str, headers: dict, body: dict,
             raw = json.loads(resp.read())
     except (URLError, OSError, TimeoutError, json.JSONDecodeError) as e:
         elapsed = (time.time() - t0) * 1000
-        log.warn("upstream non-streaming timeout", elapsed_ms=round(elapsed),
+        log.warn("上游非流式超时", elapsed_ms=round(elapsed),
                  error=str(e)[:60])
         return _build_timeout_result(full_response, observations, elapsed)
 
@@ -614,14 +615,13 @@ def _do_nonstreaming_call(endpoint: str, headers: dict, body: dict,
 
     elapsed = (time.time() - t0) * 1000
     prompt_len = len(body.get("messages", []))
-    log.info("inference complete (non-streaming)", duration_ms=round(elapsed),
+    log.info("推理完成(非流式)", duration_ms=round(elapsed),
              prompt_turns=prompt_len, upstream=upstream_type)
     return _build_result(full_response, observations)
 
-
 def _build_timeout_result(partial: str, observations: list, elapsed_ms: float) -> dict:
     """超时降级响应 — 用户可读, 网关不崩溃"""
-    fallback_msg = "[上游响应超时, 请稍后重试]"
+    fallback_msg = "⚠️ 上游响应超时，请稍后重试"
     display = (partial + fallback_msg) if partial else fallback_msg
     return {
         "response": display,
@@ -652,7 +652,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
     model = "llama3.2"
     observer = Observer(sensitivity=0.5)
     mock_mode = False
-    upstream_type = "auto"  # auto / ollama / openai
+    upstream_type = "auto"  # 自动检测 / ollama / openai
     conversations = {}  # session_id → list of turns
     request_log = deque(maxlen=50)  # 最近请求日志
     alignment_analyzer = None  # lazy init
@@ -721,7 +721,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
                     report = self.alignment_analyzer.analyze_conversation(
                         self.conversations[sid]
                     )
-                    from alignment_middleware import ReportFormatter
                     self._send_json({
                         "session_id": sid,
                         "turns": len(self.conversations[sid]),
@@ -743,7 +742,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
             if not HAS_FACT_CHECK:
                 self._send_json({"error": "fact checker not available"}, 500)
                 return
-            from hallucination_detector import KNOWLEDGE_BASE
             key = path[4:] if path.startswith("/kb/") else ""
             if key:
                 if key in KNOWLEDGE_BASE:
@@ -798,7 +796,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
             if not key:
                 self._send_json({"error": "key required"}, 400)
                 return
-            from hallucination_detector import KNOWLEDGE_BASE
             if self.command == "DELETE":
                 if key in KNOWLEDGE_BASE:
                     del KNOWLEDGE_BASE[key]
@@ -851,7 +848,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
 
         elif path == "/v1/chat/completions":
             if not self._semaphore.acquire(blocking=False):
-                self._send_json({"error":"Too Many Requests","message":f"Server at capacity (max {self.MAX_CONCURRENT} concurrent)","retry_after":1}, code=429)
+                self._send_json({"error":"Too Many Requests","message":f"服务器已达上限(最大{self.MAX_CONCURRENT}并发)","retry_after":1}, code=429)
                 return
             body = self._read_body()
             messages = body.get("messages", [])
@@ -859,13 +856,13 @@ class GatewayHandler(BaseHTTPRequestHandler):
             sensitivity = body.get("observer_sensitivity", self.observer.sensitivity)
             session_id = body.get("session_id", "default")
 
-            # 更新观察器敏感度
+            # 调整观察器灵敏度
             if sensitivity != self.observer.sensitivity:
                 self.observer.sensitivity = sensitivity
 
-            # Mock 模式或真实 LLM
+            # 模拟模式或真实推理
             if self.mock_mode:
-                # 计数该 session 的轮次
+                # 统计会话轮数
                 turn_idx = len(self.conversations.get(session_id, []))
                 response_text = mock_llm_response(messages, turn_idx)
                 result = mock_observe_text(response_text, self.observer)
@@ -876,7 +873,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                     upstream_type=self.upstream_type,
                 )
 
-            # 保存对话历史
+            # 记录对话
             user_msg = ""
             for m in messages:
                 if m.get("role") == "user":
@@ -887,7 +884,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "user": user_msg,
                 "ai": result["response"],
             })
-            # 记录到请求日志
+            # 写入请求日志
             log_entry = {
                 "time": time.strftime("%H:%M:%S"),
                 "session": session_id,
@@ -898,7 +895,6 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "latency_ms": round((time.time() - self._req_start) * 1000),
             }
             self.request_log.append(log_entry)
-
 
             # OpenAI 兼容响应格式 + 觉察标记
             response = {
@@ -939,28 +935,69 @@ class GatewayHandler(BaseHTTPRequestHandler):
         else:
             self._send_json({"error": "not found"}, 404)
 
-
 # ============================================================
 # CLI
 # ============================================================
 
+def _load_config():
+    """Load configuration from config.json, return dict or empty dict on failure."""
+    from pathlib import Path
+    try:
+        with open(Path(__file__).parent / 'config.json') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def _print_banner(args, handler_cls):
+    """Print startup banner with server configuration."""
+    mode_text = '模拟' if args.mock else '真实推理'
+    print(f"""
+╔══════════════════════════════════════════════════╗
+║  觉察推理网关  v2.1                               ║
+╠══════════════════════════════════════════════════╣
+║  监听地址: http://0.0.0.0:{args.port}
+║  运行模式: {mode_text}
+║  上游:    {args.upstream}
+║  模型:    {args.model}
+║  敏感度:  {args.sensitivity}
+║  并发上限: {handler_cls.MAX_CONCURRENT}
+╠══════════════════════════════════════════════════╣
+║  编译通道 = 肌肉记忆  |  觉察通道 = 走神空间       ║
+║  POST /analyze              → 仅分析文本          ║
+║  GET  /health               → 健康检查            ║
+║  GET  /metrics              → 观察器统计          ║
+╚══════════════════════════════════════════════════╝
+
+按 Ctrl+C 停止...
+""")
+
+
 def main():
+    config = _load_config()
+    gw_cfg = config.get("gateway", {})
+    obs_cfg = config.get("observer", {})
+
     parser = argparse.ArgumentParser(description="觉察推理网关")
-    parser.add_argument("--port", "-p", type=int, default=8800,
-                       help="监听端口 (默认 8800)")
+    parser.add_argument("--port", "-p", type=int,
+                       default=gw_cfg.get("port", 8800),
+                       help="监听端口")
     parser.add_argument("--upstream", "-u",
-                       default="http://localhost:11434/v1",
-                       help="上游 LLM API (默认 Ollama)")
-    parser.add_argument("--model", "-m", default="llama3.2",
+                       default=gw_cfg.get("upstream_url", "http://localhost:11434/v1"),
+                       help="上游 LLM API")
+    parser.add_argument("--model", "-m",
+                       default=gw_cfg.get("model", "llama3.2"),
                        help="模型名")
-    parser.add_argument("--sensitivity", "-s", type=float, default=0.5,
+    parser.add_argument("--sensitivity", "-s", type=float,
+                       default=obs_cfg.get("sensitivity", 0.5),
                        help="观察器敏感度 0~1")
-    parser.add_argument("--api-key", "-k", default="not-needed",
+    parser.add_argument("--api-key", "-k",
+                       default=gw_cfg.get("api_key", "not-needed"),
                        help="上游 API Key")
     parser.add_argument("--upstream-type", "-t", default="auto",
                        choices=["auto", "ollama", "openai"],
                        help="上游类型 (默认自动检测)")
     parser.add_argument("--mock", action="store_true",
+                       default=gw_cfg.get("mock_mode", False),
                        help="模拟 LLM 模式 (无需上游 API)")
     args = parser.parse_args()
 
@@ -974,32 +1011,13 @@ def main():
 
     server = ThreadingHTTPServer(("0.0.0.0", args.port), GatewayHandler)
 
-    print(f"""
-╔══════════════════════════════════════════════════╗
-║  觉察推理网关  v2.1                               ║
-╠══════════════════════════════════════════════════╣
-║  监听:    http://0.0.0.0:{args.port}                  
-║  模式:    {'模拟 (Mock)' if args.mock else '真实 API'}
-║  上游:    {args.upstream}
-║  模型:    {args.model}
-║  敏感度:  {args.sensitivity}
-    print(f"║  并发上限: {GatewayHandler.MAX_CONCURRENT}\")
-╠══════════════════════════════════════════════════╣
-║  编译通道: LLM = 肌肉记忆  |  觉察通道: 观察器 = 走神空间       ║
-║  POST /analyze              → 仅分析文本          ║
-║  GET  /health               → 健康检查            ║
-║  GET  /metrics              → 观察器统计          ║
-╚══════════════════════════════════════════════════╝
-
-按 Ctrl+C 停止...
-""")
+    _print_banner(args, GatewayHandler)
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\n网关已停止。")
         server.server_close()
-
 
 if __name__ == "__main__":
     main()

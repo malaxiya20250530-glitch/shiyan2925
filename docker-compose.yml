@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  gateway:
+    build: .
+    ports:
+      - "8800:8800"
+    volumes:
+      - ./feedback.db:/app/feedback.db
+      - ./kb_user.json:/app/kb_user.json
+      - ./awareness_gateway.log:/app/awareness_gateway.log
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  dashboard:
+    build: .
+    ports:
+      - "8801:8801"
+    volumes:
+      - ./feedback.db:/app/feedback.db
+    entrypoint: ["python3", "feedback_dashboard.py"]
+    command: ["--port", "8801"]
+    restart: unless-stopped

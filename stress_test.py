@@ -111,7 +111,7 @@ class StressTester:
 
     def run(self, endpoint: str = "chat"):
         print(f"\n{'='*60}")
-        print(f"  觉察网关 压力测试")
+        print(f"  觉察网关 · 压力测试")
         print(f"{'='*60}")
         print(f"  目标:    {self.base_url}")
         print(f"  端点:    {endpoint}")
@@ -156,7 +156,7 @@ class StressTester:
         n = len(lat)
 
         if n == 0:
-            print("  ❌ 所有请求均失败!")
+            print("  ❌ 全部请求失败!")
             for e in self.errors[:5]:
                 print(f"    错误: {e}")
             return
@@ -169,7 +169,7 @@ class StressTester:
         error_rate = len(self.errors) / (n + len(self.errors)) * 100
 
         print(f"\n  {'='*50}")
-        print(f"  📊 测试结果")
+        print(f"  📊 压测结果")
         print(f"  {'='*50}")
         print(f"  总耗时:       {elapsed:.2f}s")
         print(f"  成功请求:     {n}")
@@ -184,7 +184,7 @@ class StressTester:
         print(f"  P95:          {p95:.1f}ms")
         print(f"  P99:          {p99:.1f}ms")
         print(f"  {'─'*50}")
-        print(f"  观察器统计:")
+        print(f"  觉察统计:")
         for status, count in sorted(self.observer_stats.items()):
             if status not in ("total_flags", "errors"):
                 print(f"    {status:20s}: {count}")
@@ -200,7 +200,7 @@ class StressTester:
         elif error_rate < 10 and avg < 500:
             grade = "🟠 一般"
         else:
-            grade = "🔴 需优化"
+            grade = "🔴 需要优化"
 
         print(f"  评级: {grade}")
         print()
@@ -211,17 +211,17 @@ class StressTester:
 # ============================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="觉察网关压力测试")
+    parser = argparse.ArgumentParser(description="觉察网关压力测试工具")
     parser.add_argument("--port", "-p", type=int, default=8800,
-                       help="网关端口 (默认 8800)")
+                       help="网关端口(默认8800)")
     parser.add_argument("--host", default="localhost",
-                       help="网关地址 (默认 localhost)")
+                       help="网关地址(默认localhost)")
     parser.add_argument("--requests", "-n", type=int, default=50,
-                       help="总请求数 (默认 50)")
+                       help="总请求数(默认50)")
     parser.add_argument("--concurrency", "-c", type=int, default=5,
-                       help="并发数 (默认 5)")
+                       help="并发数(默认5)")
     parser.add_argument("--endpoint", "-e", choices=["chat", "analyze"],
-                       default="chat", help="测试端点 (默认 chat)")
+                       default="chat", help="测试端点(默认chat)")
     args = parser.parse_args()
 
     base_url = f"http://{args.host}:{args.port}"

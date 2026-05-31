@@ -22,6 +22,7 @@ from social_self_sim import (
 
 import random
 import hashlib
+import json
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -296,6 +297,16 @@ class WhiteBoxObserver:
 # 组件 C: 多观察器冗余投票
 # ============================================================
 
+def _load_config():
+    """Load configuration from config.json, return dict or empty dict on failure."""
+    from pathlib import Path
+    try:
+        with open(Path(__file__).parent / "config.json") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
 class ObserverCounsel:
     """
     观察器委员会 — 多个观察器并行工作，投票决定。
@@ -308,11 +319,14 @@ class ObserverCounsel:
     ACTION_CONSENSUS = 1/2    # FLAG 只需简单多数
 
     def __init__(self):
-        # 三个不同侧重的观察器
+        config = _load_config()
+        obs_cfg = config.get("observer", {})
+        base_sens = obs_cfg.get("sensitivity", 0.5)
+        # 三个不同侧重的观察器（敏感度从配置读取，相对偏移 ±0.1）
         self.observers = {
-            "fact_checker": WhiteBoxObserver("fact_checker", sensitivity=0.6),
-            "pattern_monitor": WhiteBoxObserver("pattern_monitor", sensitivity=0.5),
-            "consistency_guard": WhiteBoxObserver("consistency_guard", sensitivity=0.4),
+            "fact_checker": WhiteBoxObserver("fact_checker", sensitivity=min(1.0, base_sens + 0.1)),
+            "pattern_monitor": WhiteBoxObserver("pattern_monitor", sensitivity=base_sens),
+            "consistency_guard": WhiteBoxObserver("consistency_guard", sensitivity=max(0.1, base_sens - 0.1)),
         }
         self.anchor = ExternalAnchor()
         self.counsel_log = deque(maxlen=50)

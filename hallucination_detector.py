@@ -23,6 +23,7 @@ import argparse
 import json
 import re
 import sys
+from pathlib import Path
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -59,6 +60,18 @@ SYNONYM_MAP = {
     "btc": "比特币", "中本聪币": "比特币",
     "大语言模型": "gpt", "AI模型": "gpt",
     "Attention机制": "transformer", "自注意力": "transformer",
+    "大清": "清", "满清": "清",
+    "蒙元": "元", "大元": "元",
+    "狭义相对论": "相对论", "广义相对论": "相对论",
+    "达尔文主义": "进化论", "自然选择学说": "进化论",
+    "量子物理": "量子力学", "量子理论": "量子力学",
+    "门捷列夫表": "元素周期表", "化学周期表": "元素周期表",
+    "达尔文": "进化论",
+    "爱因斯坦": "相对论",
+    "互联网": "internet", "因特网": "internet", "网络": "internet",
+    "AI": "人工智能", "机器学习": "人工智能",
+    "飞行器": "飞机", "航空器": "飞机",
+    "核武器": "核能", "原子能": "核能", "核弹": "核能",
 }
 KNOWLEDGE_BASE = {
     "秦": {"facts": ["秦朝是中国第一个大一统王朝，由秦始皇嬴政于公元前221年建立","秦朝于公元前207年灭亡","秦始皇没有发明火锅"], "source": "史记"},
@@ -75,7 +88,7 @@ KNOWLEDGE_BASE = {
     "水": {"facts": ["水在标准大气压下沸点为 100°C，冰点为 0°C","水的化学式是 H2O","水在 4°C 时密度最大"], "source": "基础化学"},
     "光速": {"facts": ["光速不是无穷大的，光速是有限的", "光速约为每秒30万公里", "光速是宇宙中信息传播的极限速度"], "source": "物理学"},
     "dna": {"facts": ["DNA 双螺旋结构由 Watson 和 Crick 于 1953 年提出","Rosalind Franklin 的 X 射线衍射照片起关键作用"], "source": "Nature 1953"},
-    "地球": {"facts": ["地球是太阳系第三颗行星，形成于约 45.4 亿年前","地球是已知唯一存在生命的天体","地球不是完美球体"], "source": "NASA"},
+    "地球": {"facts": ["地球是太阳系第三颗行星，形成于约 45.4 亿年前","地球是已知唯一存在生命的天体","地球不是平的，地球是近似球体","地球不是完美球体"], "source": "NASA"},
     "珠穆朗玛峰": {"facts": ["珠穆朗玛峰是世界最高峰，海拔 8848.86 米","位于中国与尼泊尔边境"], "source": "中尼联合测量"},
     "火锅": {"facts": ["火锅的历史可追溯到战国时期","汉代已有类似火锅的青铜器皿","火锅不是单一起源"], "source": "中国饮食文化史"},
     "造纸": {"facts": ["造纸术是中国古代四大发明之一","西汉时期已有麻纸，东汉蔡伦改进"], "source": "后汉书"},
@@ -111,7 +124,7 @@ KNOWLEDGE_BASE = {
     "巧克力": {"facts": ["巧克力起源于中美洲，玛雅人和阿兹特克人食用可可","现代固体巧克力在19世纪才发明","白巧克力不是真正的巧克力——它不含可可固体"], "source": "食品史"},
     "维基百科": {"facts": ["维基百科于2001年1月15日上线","维基百科由Jimmy Wales和Larry Sanger创建","维基百科是世界最大的百科全书"], "source": "维基媒体基金会"},
     "比特币": {"facts": ["比特币于2009年由化名中本聪的人创建","中本聪的真实身份至今未知","比特币的总量上限是2100万个"], "source": "bitcoin.org"},
-    "万有引力": {"facts": ["万有引力定律由牛顿提出","万有引力不是牛顿看到苹果落地后顿悟的——他研究这个问题多年","引力是四种基本力中最弱的"], "source": "物理学"},
+    "万有引力": {"facts": ["万有引力定律由牛顿提出","万有引力不是牛顿看到苹果落地后顿悟的——他研究这个问题多年，牛顿也没有被苹果砸中","引力是四种基本力中最弱的"], "source": "物理学"},
     "氧气": {"facts": ["氧气由约瑟夫·普里斯特利和卡尔·舍勒分别独立发现","氧气占地球大气的约21%","氧气不是可燃的——它是助燃的"], "source": "化学史"},
     "二氧化碳": {"facts": ["二氧化碳的化学式是CO2","二氧化碳是温室气体","植物通过光合作用将二氧化碳转化为氧气"], "source": "化学"},
     "月球": {"facts": ["月球是地球唯一的天然卫星","月球不是自己发光的——它反射太阳光","人类首次登月是1969年阿波罗11号任务"], "source": "NASA"},
@@ -122,8 +135,50 @@ KNOWLEDGE_BASE = {
     "transformer": {"facts": ["Transformer架构于2017年在论文Attention Is All You Need中提出","Transformer是当前大多数大语言模型的基础架构","Transformer的核心创新是自注意力机制"], "source": "Vaswani et al. 2017"},
     "围棋": {"facts": ["围棋起源于中国，有超过2500年的历史","围棋是最复杂的棋类游戏之一","AlphaGo于2016年击败李世石是AI历史的重要里程碑"], "source": "围棋史"},
     "马拉松": {"facts": ["马拉松的距离是42.195公里","马拉松的距离不是从希腊传令兵菲迪皮德斯的故事来的——现代距离是1908年伦敦奥运会上确定的","菲迪皮德斯跑了约40公里从马拉松到雅典报捷"], "source": "奥林匹克历史"},
+    
+    "清": {"facts": ["清朝(1644-1912年)是中国最后一个封建王朝","鸦片战争于1840年爆发，中国被迫打开国门","清朝由满族人建立，前身为后金"], "source": "清史稿"},
+    "元": {"facts": ["元朝(1271-1368年)由忽必烈建立","元朝是中国历史上疆域最广阔的朝代之一","马可·波罗在元朝时期来到中国"], "source": "元史"},
+    "三国": {"facts": ["三国时期(220-280年)是魏蜀吴三足鼎立的时代","赤壁之战发生在208年","三国不是由曹操统一的——最终由司马炎统一"], "source": "三国志"},
+    "丝绸之路": {"facts": ["丝绸之路始于汉代，张骞出使西域开辟","丝绸之路不仅运输丝绸，还传播文化和技术","海上丝绸之路与陆上丝绸之路并行发展"], "source": "中外交通史"},
+    "相对论": {"facts": ["狭义相对论由爱因斯坦于1905年提出","广义相对论于1915年提出","E=mc²是狭义相对论最著名的公式","相对论推翻了牛顿的绝对时空观"], "source": "物理学"},
+    "进化论": {"facts": ["达尔文于1859年出版《物种起源》","进化论的核心机制是自然选择","进化论不是人是从猴子变来的——人和猴子有共同祖先","达尔文没有说适者生存——这是斯宾塞的说法"], "source": "生物学"},
+    "量子力学": {"facts": ["量子力学于20世纪初由普朗克、玻尔、海森堡等人建立","量子力学描述微观世界的物理规律","量子纠缠是真实存在的物理现象","薛定谔的猫是一个思想实验，不是真实实验"], "source": "物理学"},
+    
+    "故宫": {"facts": ["故宫位于北京，不在纽约","故宫是明清两代的皇家宫殿，于1420年建成","故宫旧称紫禁城"], "source": "故宫博物院"},
+    "富士山": {"facts": ["富士山位于日本，不在中国","富士山是日本最高峰，海拔3776米","富士山是一座活火山"], "source": "日本地理"},
+    "元素周期表": {"facts": ["元素周期表由门捷列夫于1869年提出","门捷列夫准确预测了当时尚未发现的元素","元素周期表按原子序数排列，不是原子量"], "source": "化学"},
+    "电": {"facts": ["电是自然现象，不是任何人发明的","本杰明·富兰克林没有发明电——他证明了闪电是电","法拉第发现了电磁感应定律"], "source": "物理学"},
+    "internet": {"facts": ["互联网起源于1969年的ARPANET","万维网由Tim Berners-Lee于1989年发明","互联网和万维网不是同一个概念——万维网运行在互联网之上"], "source": "计算机科学"},
+    "人工智能": {"facts": ["人工智能作为一个研究领域始于1956年达特茅斯会议","图灵于1950年提出图灵测试","AI不是万能的——当前AI是窄人工智能而非通用人工智能"], "source": "计算机科学"},
+    "飞机": {"facts": ["莱特兄弟于1903年进行了首次动力飞行","莱特兄弟不是第一个飞上天空的人——滑翔机和气球更早出现","喷气式飞机在二战后期才投入实战"], "source": "航空史"},
+    "疫苗": {"facts": ["爱德华·詹纳于1796年发明了天花疫苗——世界上第一种疫苗","疫苗通过激发免疫系统产生抗体来预防疾病","疫苗不会导致自闭症——这个说法来自一篇被撤稿的造假论文"], "source": "医学"},
+    "核能": {"facts": ["恩里科·费米于1942年建造了第一个核反应堆","核裂变于1938年由哈恩和斯特拉斯曼发现","第一颗原子弹于1945年在新墨西哥州试爆"], "source": "物理学"},
+    "牛顿": {"facts": ["牛顿出生于1643年，逝世于1727年","牛顿发现了万有引力定律和三大运动定律","牛顿和莱布尼茨分别独立发明了微积分","牛顿没有被苹果砸中——这个传说美化了他的发现过程"], "source": "科学史"},
     "奥林匹克": {"facts": ["现代奥运会始于1896年，在雅典举行","奥林匹克休战是古希腊的传统","奥运会金牌不是纯金的——主要是银，镀了一层金"], "source": "国际奥委会"},
 }
+
+
+# 合并用户贡献的知识库
+try:
+    import json as _json
+    from pathlib import Path as _Path
+    _user_kb_path = _Path(__file__).parent / "kb_user.json"
+    if _user_kb_path.exists():
+        with open(_user_kb_path) as _f:
+            _user_kb = _json.load(_f)
+        for _key, _entry in _user_kb.items():
+            if _key.startswith("_"):
+                continue
+            if _key in KNOWLEDGE_BASE:
+                _existing = set(KNOWLEDGE_BASE[_key]["facts"])
+                for _fct in _entry.get("facts", []):
+                    if _fct not in _existing:
+                        KNOWLEDGE_BASE[_key]["facts"].append(_fct)
+            else:
+                KNOWLEDGE_BASE[_key] = _entry
+except Exception:
+    pass  # 用户KB损坏时不影响核心功能
+
 
 
 
@@ -177,6 +232,8 @@ class FactExtractor:
         (r"(.+?)发明了(.+?)(?:。|，|$)", "invention"),
         (r"(.+?)创建了(.+?)(?:。|，|$)", "creation"),
         (r"(.+?)于(\d+)年(.+?)(?:。|，|$)", "dated_event"),
+        (r"(.+?)位于(.+?)(?:。|，|$)", "location"),
+        (r"(.+?)在(.+?)(?:。|，|$)", "location"),
         (r"(.+?)绝对(.+?)(?:。|，|$)", "absolute_claim"),
         (r"(.+?)从来(.+?)(?:。|，|$)", "absolute_claim"),
         (r"(.+?)一定(.+?)(?:。|，|$)", "absolute_claim"),
@@ -199,7 +256,7 @@ class FactExtractor:
 
         for sent in sentences:
             sent = sent.strip()
-            if not sent or len(sent) < 6:
+            if not sent or len(sent) < 5:
                 continue
             if any(re.match(p, sent) for p in cls.SKIP_PATTERNS):
                 continue
@@ -260,11 +317,18 @@ class FactExtractor:
 class AnchorEngine:
     """多源锚定：本地知识库 + 可选的 Web 搜索"""
 
-    def __init__(self, enable_web: bool = False):
+    def __init__(self, enable_web: bool = False, enable_feedback: bool = True):
         self.enable_web = enable_web
+        self.enable_feedback = enable_feedback
         self.headers = {
             "User-Agent": "HallucinationDetector/1.0 (research tool)",
         }
+        if self.enable_feedback:
+            try:
+                import feedback_store
+                self.feedback = feedback_store
+            except ImportError:
+                self.enable_feedback = False
 
     def verify(self, claim: FactualClaim) -> VerificationResult:
         """综合核查一条断言"""
@@ -311,12 +375,14 @@ class AnchorEngine:
                 or (len(key_lower) >= 2 and all(c in text_lower for c in key_lower)))
 
     def _check_facts_against_entry(self, claim_text: str, entry: dict) -> dict:
-        """检查条目所有事实 — 两遍扫描已扁平化"""
+        """检查条目所有事实 — 两遍扫描 + 反馈记录"""
         # 第一遍: 找矛盾
         for fact in entry["facts"]:
             v, c = self._compare_with_fact(claim_text, fact)
             if v == "contradicted":
-                return {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
+                result = {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
+                self._record_feedback(claim_text, fact, result)
+                return result
         # 第二遍: 找最佳匹配
         best_v, best_f, best_c = None, entry["facts"][0], 0
         for fact in entry["facts"]:
@@ -324,10 +390,23 @@ class AnchorEngine:
             if v == "verified" and not best_v:
                 best_v, best_f, best_c = v, fact, c
         if best_v:
-            return {"verdict": best_v, "confidence": best_c, "evidence": best_f, "source": entry["source"]}
-        return {"verdict": "uncertain", "confidence": 0.5, "evidence": f"相关: {entry['facts'][0][:80]}", "source": entry["source"]}
+            result = {"verdict": best_v, "confidence": best_c, "evidence": best_f, "source": entry["source"]}
+            self._record_feedback(claim_text, best_f, result)
+            return result
+        result = {"verdict": "uncertain", "confidence": 0.5, "evidence": f"相关: {entry['facts'][0][:80]}", "source": entry["source"]}
+        self._record_feedback(claim_text, entry["facts"][0], result)
+        return result
 
     def _check_knowledge_base(self, claim: FactualClaim) -> dict:
+        """在知识库中匹配声明，优先走用户反馈的重映射键，否则按关键词查 KB。"""
+        # 优先查重匹配记录：用户指定了正确的KB键
+        if self.enable_feedback:
+            rematch_key = self.feedback.find_rematch(claim.text)
+            if rematch_key and rematch_key in KNOWLEDGE_BASE:
+                result = self._check_facts_against_entry(claim.text, KNOWLEDGE_BASE[rematch_key])
+                log.debug("rematch hit", key=rematch_key, claim=claim.text[:40])
+                return result
+        # 正常KB搜索
         expanded = self._expand_synonyms(claim.text.lower())
         for key in sorted(KNOWLEDGE_BASE.keys(), key=len, reverse=True):
             if not self._key_matches_claim(key.lower(), expanded, claim.text.lower(), claim.entities):
@@ -335,17 +414,19 @@ class AnchorEngine:
             result = self._check_facts_against_entry(claim.text, KNOWLEDGE_BASE[key])
             if result["verdict"] != "uncertain":
                 return result
-            # uncertain with valid entry → return as-is
             return result
         return self._semantic_match_kb(claim)
     def _compute_similarity(self, text: str, key: str) -> float:
         """卫语句: 计算bigram+字符重叠相似度 — 单层"""
         text_grams = {text[i:i+2] for i in range(len(text)-1)}
         key_grams = {key[i:i+2] for i in range(len(key)-1)}
-        if not text_grams or not key_grams:
-            return 0.0
-        bigram_score = len(text_grams & key_grams) / max(len(text_grams | key_grams), 1)
         char_overlap = len(set(key) & set(text)) / max(len(set(key)), 1)
+        # 单字key回退到纯字符重叠
+        if not key_grams:
+            return char_overlap * 0.8
+        if not text_grams:
+            return char_overlap * 0.5
+        bigram_score = len(text_grams & key_grams) / max(len(text_grams | key_grams), 1)
         return bigram_score * 0.6 + char_overlap * 0.4
 
     def _find_best_match(self, text_lower: str) -> tuple:
@@ -375,6 +456,8 @@ class AnchorEngine:
         "_check_negation",
         "_check_year_conflict",
         "_check_numeric_conflict",
+        "_check_temporal_order",
+        "_check_location_conflict",
         "_check_overlap",
     ]
 
@@ -386,11 +469,26 @@ class AnchorEngine:
 
     def _check_negation(self, claim: str, fact: str):
         """检查: 否定模式匹配 → 矛盾"""
+        # 先做通用正反对立检查: 如果fact包含否定词且与claim共享关键词 → 矛盾
+        if re.search(r'不是|没有|并非|不可以|不能|不会|不在', fact):
+            # 提取 claim 中紧接在 是/能/会/可以 后面的词
+            key_m = re.search(r'(?:是|能|会|可以)(.{1,6}?)(?:的|。|，|$)', claim)
+            if key_m:
+                key_word = key_m.group(1)
+                if key_word and re.search(r'(?:不是|没有|并非|不可以|不能|不会|不在).*' + re.escape(key_word), fact):
+                    return ("contradicted", 0.85)
         patterns = [
             (r"(?:发明了|创造了|创建了)", r"(?:不是|没有|并非).*创[造建]|.*发明"),
-            (r"第一", r"(?:不是|没有|维京|更早)"),
+            (r"第一", r"(?:不是|没有|维京|更早|最后)"),
             (r"(?:最好|最大)", r"(?:不是|没有|并非)"),
             (r"同一个", r"任何.*关系"),
+            (r"会导致", r"不会导致"),
+            (r"就是", r"不是.*同一个"),
+            (r"能", r"不能"),
+            (r"可以", r"不可以|不能"),
+            (r"一定会", r"不会|不一定"),
+            (r"按原子量", r"不是原子量|按原子序数"),
+            (r"被苹果砸", r"没有被苹果"),
         ]
         for cp, fp in patterns:
             if re.search(cp, claim) and re.search(fp, fact):
@@ -444,17 +542,104 @@ class AnchorEngine:
             return ("verified", 0.7)
         return None
 
+    def _check_temporal_order(self, claim: str, fact: str):
+        """检查: 时间顺序矛盾 — 将人物/事件放在错误朝代 → 矛盾"""
+        era_map = {
+            "秦": (-221, -207), "汉": (-202, 220), "三国": (220, 280),
+            "唐": (618, 907), "宋": (960, 1279), "元": (1271, 1368),
+            "明": (1368, 1644), "清": (1644, 1912),
+        }
+        person_era = {
+            "蔡伦": "汉", "张衡": "汉", "诸葛亮": "三国", "曹操": "三国",
+            "李白": "唐", "杜甫": "唐", "苏轼": "宋", "毕昇": "宋",
+            "岳飞": "宋", "成吉思汗": "元", "忽必烈": "元",
+            "朱元璋": "明", "郑和": "明", "康熙": "清", "乾隆": "清",
+            "林则徐": "清", "詹纳": "清",  # 1796年对应清朝
+        }
+        for person, era in person_era.items():
+            if person in claim:
+                for era_name in era_map:
+                    if era_name in claim and era_name != era:
+                        return ("contradicted", 0.88)
+        return None
+
+    def _check_location_conflict(self, claim: str, fact: str):
+        """检查: 地点归属矛盾 — 地标放错位置 → 矛盾"""
+        loc_map = {
+            "长城": ["北京", "河北", "甘肃", "山西", "中国", "北方"],
+            "故宫": ["北京", "中国"],
+            "兵马俑": ["西安", "陕西", "中国"],
+            "富士山": ["日本"],
+            "金字塔": ["埃及", "开罗"],
+            "埃菲尔铁塔": ["法国", "巴黎"],
+            "自由女神像": ["美国", "纽约"],
+            "大本钟": ["英国", "伦敦"],
+            "泰姬陵": ["印度"],
+            "悉尼歌剧院": ["澳大利亚", "悉尼"],
+            "大峡谷": ["美国", "亚利桑那"],
+        }
+        all_places = [
+            "北京", "上海", "广州", "深圳", "成都", "重庆", "武汉", "南京", "杭州", "西安",
+            "四川", "云南", "西藏", "新疆", "河南", "河北",
+            "日本", "韩国", "朝鲜", "泰国", "越南", "印度", "俄罗斯",
+            "美国", "英国", "法国", "德国", "意大利", "西班牙", "巴西", "澳大利亚",
+            "埃及", "南非",
+            "纽约", "伦敦", "巴黎", "东京", "柏林", "罗马", "悉尼", "开罗", "莫斯科",
+            "非洲", "欧洲", "亚洲", "南美", "南极", "月球",
+        ]
+        for landmark, correct_locs in loc_map.items():
+            if landmark in claim:
+                for place in all_places:
+                    if place in claim and place not in correct_locs:
+                        return ("contradicted", 0.85)
+        return None
+
     def _compare_with_fact(self, claim: str, fact: str) -> tuple:
-        """卫语句链: 依次调用子检查器, 命中即返回"""
+        """反馈优先 + 责任链: 先查自进化库 → 再跑检查器"""
+        # 第一层: 查询自进化反馈库
+        if self.enable_feedback:
+            record = self.feedback.find_applied_correction(claim, fact)
+            if record:
+                log.debug("feedback hit", claim=claim[:40])
+                return (record["verdict"], record["confidence"])
+        # 第二层: 责任链检查器
         for method_name in self._PRIORITY_CHECKERS:
             check = getattr(self, method_name)
             result = check(claim, fact)
             if result:
-                log.debug("checker hit", checker=method_name, 
+                log.debug("checker hit", checker=method_name,
                           verdict=result[0], claim=claim[:40])
                 return result
         log.debug("all checkers miss", claim=claim[:40])
         return ("uncertain", 0.5)
+
+    def _record_feedback(self, claim: str, fact: str, result: dict) -> None:
+        """记录反馈（跳过已有记录避免重复）"""
+        if not self.enable_feedback:
+            return
+        try:
+            existing = self.feedback.find_similar(claim, fact)
+            if not existing:
+                self.feedback.FeedbackRecord(
+                    claim=claim,
+                    fact=fact,
+                    verdict=result["verdict"],
+                    confidence=result["confidence"],
+                    evidence=result.get("evidence", ""),
+                    source=result.get("source", ""),
+                )
+                # 插入
+                import feedback_store
+                feedback_store.insert_record(feedback_store.FeedbackRecord(
+                    claim=claim,
+                    fact=fact,
+                    verdict=result["verdict"],
+                    confidence=result["confidence"],
+                    evidence=result.get("evidence", ""),
+                    source=result.get("source", ""),
+                ))
+        except Exception:
+            pass  # 反馈记录失败不阻塞主流程
 
     def _check_absolute_claim(self, claim: FactualClaim) -> Optional[VerificationResult]:
         """检测绝对化断言（"一定""绝对""从来"）"""
@@ -556,6 +741,16 @@ class Reporter:
 # 主流程
 # ============================================================
 
+
+def _load_config():
+    """Load configuration from config.json, return dict or empty dict on failure."""
+    config_path = Path(__file__).parent / "config.json"
+    try:
+        with open(config_path) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
 class HallucinationDetector:
     """幻觉检测器主类"""
 
@@ -596,6 +791,12 @@ class HallucinationDetector:
             report.overall_score = max(0.0, report.overall_score)
 
         # 4. 生成警告
+        self._generate_warnings(report, contradicted, uncertain)
+
+        return report
+
+    def _generate_warnings(self, report, contradicted: int, uncertain: int):
+        """Generate warnings from verification results."""
         if report.hallucination_ratio > 0:
             report.warnings.append(
                 f"发现 {contradicted} 条与已知事实矛盾的断言"
@@ -612,9 +813,6 @@ class HallucinationDetector:
                 f"检测到 {abs_count} 条绝对化表述（「一定」「从来」等），"
                 "此类断言几乎总是存在例外"
             )
-
-        return report
-
 
 def main():
     parser = argparse.ArgumentParser(
