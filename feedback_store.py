@@ -60,6 +60,41 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_feedback_applied
             ON feedback(applied)
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS uncertain_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim TEXT NOT NULL,
+                verdict TEXT DEFAULT 'uncertain',
+                confidence REAL,
+                context TEXT,
+                user_label TEXT,
+                correct_fact TEXT,
+                created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+                processed INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_uncertain_processed
+            ON uncertain_samples(processed)
+        """)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         conn.commit()
 
 

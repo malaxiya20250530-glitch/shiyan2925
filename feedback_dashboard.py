@@ -151,11 +151,83 @@ def build_card(record: dict) -> str:
 </div>"""
 
 
+
+UNCERTAIN_TEMPLATE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>不确定样本 · 主动学习</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:#0d1117;color:#c9d1d9;padding:20px}
+h1{color:#58a6ff;margin-bottom:8px}
+.sub{color:#8b949e;font-size:14px;margin-bottom:20px}
+.stats{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.stat{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px 16px;min-width:100px}
+.stat .num{font-size:24px;font-weight:bold;color:#58a6ff}
+.stat .label{font-size:12px;color:#8b949e}
+.sample{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px;margin-bottom:12px}
+.sample .claim{font-size:15px;color:#e6edf3;margin-bottom:10px;word-break:break-all}
+.sample .meta{font-size:12px;color:#8b949e;margin-bottom:12px}
+.btn{display:inline-block;padding:6px 14px;border-radius:6px;border:1px solid #30363d;cursor:pointer;font-size:13px;margin-right:8px;background:#21262d;color:#c9d1d9}
+.btn:hover{background:#30363d}
+.btn-correct{color:#3fb950;border-color:#3fb950}
+.btn-wrong{color:#f85149;border-color:#f85149}
+.btn-ignore{color:#8b949e}
+.btn:disabled{opacity:0.4;cursor:default}
+.fact-input{display:none;margin-top:10px}
+.fact-input textarea{width:100%;background:#0d1117;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:8px;font-size:13px;resize:vertical;min-height:60px}
+.fact-input .btn-submit{margin-top:8px;background:#238636;color:#fff;border-color:#238636}
+.toast{position:fixed;bottom:20px;right:20px;background:#238636;color:#fff;padding:12px 20px;border-radius:8px;display:none;z-index:999}
+.nav{margin-bottom:20px}.nav a{color:#58a6ff;text-decoration:none;margin-right:16px}
+.empty{text-align:center;padding:40px;color:#8b949e}
+</style>
+</head>
+<body>
+<h1>🔍 不确定样本池</h1>
+<p class="sub">检测器无法确定的断言 — 你的标注会直接进化知识库</p>
+<div class="nav"><a href="/feedback">← 反馈复核</a><a href="/uncertain">不确定样本</a></div>
+<div class="stats" id="stats"></div>
+<div id="samples"></div>
+<div class="toast" id="toast"></div>
+<script>
+async function load(){let r=await fetch("/api/uncertain/list");let d=await r.json();
+document.getElementById("stats").innerHTML=
+  `<div class="stat"><div class="num">${d.total}</div><div class="label">总数</div></div>
+   <div class="stat"><div class="num">${d.pending}</div><div class="label">待标注</div></div>
+   <div class="stat"><div class="num">${d.labeled}</div><div class="label">已标注</div></div>`;
+let h="";
+if(!d.samples||d.samples.length===0)h='<div class="empty"><h2>🎉 没有待标注样本</h2><p>所有不确定样本已处理完毕</p></div>';
+else for(let s of d.samples)h+=`<div class="sample" id="s-${s.id}">
+  <div class="claim">💬 ${s.claim.replace(/</g,"&lt;")}</div>
+  <div class="meta">置信度: ${(s.confidence*100).toFixed(0)}% | ${s.context||""} | ${s.created_at||""}</div>
+  <button class="btn btn-correct" onclick="label(${s.id},'correct')">✅ 检测正确</button>
+  <button class="btn btn-wrong" onclick="showFact(${s.id})">❌ 检测错误</button>
+  <button class="btn btn-ignore" onclick="label(${s.id},'ignore')">⏭️ 忽略</button>
+  <div class="fact-input" id="fact-${s.id}">
+    <textarea id="ta-${s.id}" placeholder="请输入正确的事实..."></textarea>
+    <button class="btn btn-submit" onclick="submitFact(${s.id})">✅ 提交并加入知识库</button>
+  </div></div>`;
+document.getElementById("samples").innerHTML=h}
+
+function showFact(id){document.getElementById("fact-"+id).style.display="block"}
+async function label(id,type){await fetch("/api/uncertain/label",{method:"POST",body:JSON.stringify({id,label:type})});toast("已标注");document.getElementById("s-"+id).remove()}
+async function submitFact(id){let fact=document.getElementById("ta-"+id).value;if(!fact)return;await fetch("/api/uncertain/label",{method:"POST",body:JSON.stringify({id,label:"wrong",correct_fact:fact})});toast("已加入知识库 ✨");document.getElementById("s-"+id).remove()}
+function toast(msg){let t=document.getElementById("toast");t.textContent=msg;t.style.display="block";setTimeout(()=>t.style.display="none",2000)}
+load()
+</script>
+</body></html>"""
+
 class FeedbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/" or path == "/feedback":
             self._serve_page()
+        elif path == "/uncertain":
+            self._html(UNCERTAIN_TEMPLATE)
+        elif path == "/api/uncertain/list":
+            self._serve_uncertain_list()
         elif path == "/api/stats":
             self._json(fs.get_stats())
         else:
@@ -191,6 +263,8 @@ class FeedbackHandler(BaseHTTPRequestHandler):
                 self._json({"ok": True})
             else:
                 self._json({"ok": False, "error": "missing id or rematch_key"})
+        elif path == "/api/uncertain/label":
+            self._handle_uncertain_label(body)
         else:
             self.send_error(404)
 
@@ -292,6 +366,92 @@ class FeedbackHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # 静默日志
 
+
+
+    def _serve_uncertain_list(self):
+        """返回未处理的不确定样本列表"""
+        import sqlite3, time
+        conn = sqlite3.connect(str(fs.DB_PATH))
+        conn.row_factory = sqlite3.Row
+        samples = conn.execute(
+            "SELECT id, claim, verdict, confidence, context, created_at, processed FROM uncertain_samples WHERE processed=0 ORDER BY created_at DESC LIMIT 50"
+        ).fetchall()
+        total = conn.execute("SELECT COUNT(*) as cnt FROM uncertain_samples").fetchone()["cnt"]
+        pending = conn.execute("SELECT COUNT(*) as cnt FROM uncertain_samples WHERE processed=0").fetchone()["cnt"]
+        labeled = total - pending
+        conn.close()
+        result = {
+            "total": total,
+            "pending": pending,
+            "labeled": labeled,
+            "samples": [{
+                "id": s["id"],
+                "claim": s["claim"],
+                "verdict": s["verdict"],
+                "confidence": s["confidence"],
+                "context": s["context"],
+                "created_at": time.strftime("%m-%d %H:%M", time.localtime(s["created_at"])) if s["created_at"] else "",
+            } for s in samples]
+        }
+        self._json(result)
+
+    def _handle_uncertain_label(self, body: dict):
+        """处理不确定样本的标注"""
+        import sqlite3, json as _json, time
+        rid = body.get("id")
+        label = body.get("label")
+        correct_fact = body.get("correct_fact", "")
+        if not rid or not label:
+            self._json({"ok": False, "error": "missing id or label"})
+            return
+        conn = sqlite3.connect(str(fs.DB_PATH))
+        conn.execute(
+            "UPDATE uncertain_samples SET user_label=?, correct_fact=?, processed=1 WHERE id=?",
+            (label, correct_fact, rid)
+        )
+        conn.commit()
+        conn.close()
+        # 如果用户提供了正确事实 → 自动加入 KB 和向量库
+        if label == "wrong" and correct_fact:
+            self._apply_correct_fact_to_kb(rid, correct_fact)
+        self._json({"ok": True})
+
+    def _apply_correct_fact_to_kb(self, sample_id: int, correct_fact: str):
+        """将用户标注的正确事实写入 kb_user.json 并更新向量库"""
+        try:
+            import sqlite3, json as _json
+            from pathlib import Path as _P
+            conn = sqlite3.connect(str(fs.DB_PATH))
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("SELECT claim FROM uncertain_samples WHERE id=?", (sample_id,)).fetchone()
+            conn.close()
+            if not row:
+                return
+            claim = row["claim"]
+            # 提取键
+            import re
+            matches = re.findall(r'[一-鿿A-Za-z]{2,}', claim)
+            key = matches[0] if matches else claim[:6]
+            # 写入 kb_user.json
+            kb_path = _P(__file__).parent / "kb_user.json"
+            with open(kb_path) as f:
+                data = _json.load(f)
+            if key not in data:
+                data[key] = {"facts": [], "source": "主动学习标注"}
+            new_fact = f"{claim}——用户标注正确事实：{correct_fact}"
+            if new_fact not in data[key]["facts"]:
+                data[key]["facts"].append(new_fact)
+            with open(kb_path, "w") as f:
+                _json.dump(data, f, ensure_ascii=False, indent=2)
+            # 更新向量库
+            try:
+                from vector_kb import get_vector_kb
+                vkb = get_vector_kb()
+                vkb.add(key, new_fact)
+            except ImportError:
+                pass
+        except Exception:
+            pass
 
 def main():
     port = 8900

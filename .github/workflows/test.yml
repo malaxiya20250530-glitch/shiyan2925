@@ -1,0 +1,58 @@
+name: 测试
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 安装 Tesseract（OCR 支持）
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-chi-sim
+
+      - name: 初始化反馈数据库
+        run: python3 -c "import feedback_store; feedback_store.init_db()"
+
+      - name: 运行全部测试
+        run: |
+          echo "=== 幻觉检测核心 ===" && python3 test_fact_checker.py
+          echo "=== 反馈库 ===" && python3 test_feedback_store.py
+          echo "=== 知识库管理 ===" && python3 test_update_kb.py
+          echo "=== 安全观察 ===" && python3 test_observer_security.py
+          echo "=== 对齐分析 ===" && python3 test_alignment_middleware.py
+          echo "=== 观察代理 ===" && python3 test_observer_proxy.py
+          echo "=== 仪表盘 ===" && python3 test_feedback_dashboard.py
+          echo "=== 压力测试 ===" && python3 test_stress.py
+          echo "=== 向量检索 ===" && python3 test_vector_kb.py
+
+      - name: 语法检查
+        run: |
+          python3 -c "import hallucination_detector, awareness_gateway, observer_proxy, observer_security, alignment_middleware, feedback_store, feedback_dashboard, update_kb, logger, vector_kb, web_verifier, ocr_handler"
+          echo "全部模块导入成功"
+
+      - name: OCR 演示
+        run: python3 ocr_handler.py --text "朱元璋发明了火锅" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['claims_count']>0; print(f'OCR检测: {d[\"claims_count\"]}条断言, 幻觉率{d[\"hallucination_ratio\"]:.0%}')"
+
+      - name: Gateway 启动测试
+        run: |
+          python3 awareness_gateway.py --mock --port 8800 &
+          sleep 2
+          curl -s http://localhost:8800/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='ok'; print('Gateway健康检查通过')"
+          curl -s -X POST http://localhost:8800/ocr -H "Content-Type: application/json" -d '{"text":"测试"}' | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'OCR端点: claims={d.get(\"claims_count\",\"?\")}')"
+          kill %1

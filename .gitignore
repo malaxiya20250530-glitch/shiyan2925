@@ -5,3 +5,7 @@ __pycache__/
 .ollama/
 .codex/
 military_news.txt
+web_cache.db
+build/
+*.so
+*.c

@@ -345,17 +345,100 @@ class AnchorEngine:
                 anchor_type="knowledge_base",
             )
 
-        # 2. 绝对化断言检测
+        # 2. 混合检索：BM25 + TF-IDF 向量（新增）
+        try:
+            from vector_kb import get_hybrid_retriever
+            hr = get_hybrid_retriever()
+            matches = hr.search(claim.text, top_k=2, threshold=0.12)
+            for vk_key, vk_fact, vk_sim in matches:
+                # 关键词重叠检查：避免无关事实被误判
+                # 提取 claim 中 2-gram 关键词（中文按字切分）
+                claim_kw = [claim.text[i:i+2] for i in range(len(claim.text)-1)]
+                if claim_kw:
+                    overlap = sum(1 for kw in claim_kw if kw in vk_fact)
+                    if overlap == 0:
+                        continue
+                result = self._compare_with_fact(claim.text, vk_fact)
+                if result[0] != "uncertain":
+                    return VerificationResult(
+                        claim=claim.text,
+                        verdict=result[0],
+                        confidence=max(result[1], vk_sim * 0.8),
+                        evidence=vk_fact,
+                        source=f"混合检索 (key={vk_key}, score={vk_sim:.2f})",
+                        anchor_type="hybrid_retrieval",
+                    )
+        except ImportError:
+            pass
+
+        # 3. 联网验证 — 多源交叉验证（新增）
+        if self.enable_web:
+            web_sources = []
+            # 源 1: DuckDuckGo
+            try:
+                from web_verifier import WebVerifier
+                ddg = WebVerifier()
+                web_sources.append(ddg.verify(claim.text))
+            except (ImportError, Exception):
+                pass
+            # 源 2: Wikipedia
+            try:
+                from web_verifier import WikipediaVerifier
+                wiki = WikipediaVerifier()
+                web_sources.append(wiki.verify(claim.text))
+            except (ImportError, Exception):
+                pass
+
+            # 加权融合多源结果
+            verified_sources = [s for s in web_sources if s["verdict"] == "verified"]
+            if verified_sources:
+                best = max(verified_sources, key=lambda s: s["confidence"])
+                return VerificationResult(
+                    claim=claim.text,
+                    verdict="verified",
+                    confidence=best["confidence"] * (0.7 + 0.15 * len(verified_sources)),
+                    evidence=best["evidence"],
+                    source=f"{best['source']} (+{len(verified_sources)-1}源交叉验证)" if len(verified_sources) > 1 else best["source"],
+                    anchor_type="web_search",
+                )
+            elif any(s["verdict"] == "uncertain" and s["confidence"] > 0.1 for s in web_sources):
+                best_uncertain = max([s for s in web_sources if s["confidence"] > 0.1], key=lambda s: s["confidence"], default=None)
+                if best_uncertain and best_uncertain["evidence"]:
+                    return VerificationResult(
+                        claim=claim.text,
+                        verdict="uncertain",
+                        confidence=best_uncertain["confidence"],
+                        evidence=best_uncertain["evidence"],
+                        source=best_uncertain["source"],
+                        anchor_type="web_search",
+                    )
+
+        # 4. 绝对化断言检测
         abs_result = self._check_absolute_claim(claim)
         if abs_result:
             return abs_result
 
-        # 3. 无法核查
+        # 记录不确定样本到反馈库
+        try:
+            import sqlite3, time
+            from pathlib import Path
+            db_path = Path(__file__).parent / "feedback.db"
+            conn = sqlite3.connect(str(db_path))
+            conn.execute(
+                "INSERT INTO uncertain_samples (claim, verdict, confidence, context, created_at) VALUES (?,?,?,?,?)",
+                (claim.text[:200], "uncertain", 0.3, "三级管道均未命中", time.time())
+            )
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+
+        # 5. 无法核查
         return VerificationResult(
             claim=claim.text,
             verdict="unverifiable",
             confidence=0.3,
-            evidence="无法在本地知识库中找到相关信息",
+            evidence="无法在本地知识库和网络中验证此信息",
             source="",
             anchor_type="none",
         )
@@ -813,6 +896,28 @@ class HallucinationDetector:
                 f"检测到 {abs_count} 条绝对化表述（「一定」「从来」等），"
                 "此类断言几乎总是存在例外"
             )
+
+
+def generate_correction_prompt(text: str) -> str:
+    """分析文本，若有事实矛盾则生成纠正性提示，供注入 LLM system prompt。
+    返回空字符串表示无需纠正。"""
+    detector = HallucinationDetector()
+    report = detector.analyze(text)
+    corrections = []
+    for r in report.results:
+        if r.verdict == 'contradicted' and r.evidence:
+            corrections.append(
+                f"- 用户说「{r.claim}」，但已知事实是：{r.evidence}（来源：{r.source}）"
+            )
+    if not corrections:
+        return ''
+    parts = [
+        '[觉察层 · 自动事实纠正]',
+        '以下用户消息中存在与已知事实矛盾的内容，请在回复中礼貌纠正：',
+    ]
+    parts.extend(corrections)
+    parts.append('纠正时请引用可靠来源，保持礼貌和专业。')
+    return chr(10).join(parts)
 
 def main():
     parser = argparse.ArgumentParser(

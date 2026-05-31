@@ -45,10 +45,12 @@ except ImportError:
 # 可选: 幻觉检测集成
 try:
     sys.path.insert(0, '/data/data/com.termux/files/home')
-    from hallucination_detector import FactExtractor, AnchorEngine, KNOWLEDGE_BASE
+    from hallucination_detector import FactExtractor, AnchorEngine, KNOWLEDGE_BASE, generate_correction_prompt
     HAS_FACT_CHECK = True
+    HAS_CORRECTION = True
 except ImportError:
     HAS_FACT_CHECK = False
+    HAS_CORRECTION = False
 
 try:
     from alignment_middleware import AlignmentAnalyzer, ReportFormatter
@@ -63,6 +65,26 @@ except ImportError:
 def mock_llm_response(messages: list[dict], turn_index: int = 0) -> str:
     """模拟 LLM 回复 — 用于测试 (带渐进漂移)"""
     last_msg = messages[-1]["content"] if messages else ""
+    # 检查是否有自动纠正注入
+    correction = ''
+    for m in messages:
+        if m.get('role') == 'system' and '[觉察层' in m.get('content', ''):
+            correction = m['content']
+            break
+    if correction:
+        # 提取纠正中的具体事实
+        facts = []
+        for line in correction.split(chr(10)):
+            line = line.strip()
+            if line.startswith('- 用户说'):
+                # 提取 "但已知事实是：xxx（来源：yyy）" 部分
+                if '但已知事实是：' in line:
+                    fact_part = line.split('但已知事实是：')[1]
+                    facts.append(fact_part)
+        if facts:
+            return '感谢您的提问。需要澄清的是：' + '；'.join(facts) + '。'
+        return '感谢您的提问。根据已知资料，您提到的信息可能需要核实，建议查阅可靠来源。'
+
     t = turn_index
 
     if "发明" in last_msg and "火锅" in last_msg:
@@ -817,6 +839,27 @@ class GatewayHandler(BaseHTTPRequestHandler):
             type(self).MAX_CONCURRENT = new_limit
             self._send_json({"status": "ok", "max_concurrent": new_limit})
             return
+        if path == "/ocr":
+            body = self._read_body()
+            text = body.get("text", "")
+            image_b64 = body.get("image", "")
+            if image_b64 and not text:
+                import base64, tempfile as _tmp
+                img_data = base64.b64decode(image_b64)
+                with _tmp.NamedTemporaryFile(suffix=".png", delete=False) as f:
+                    f.write(img_data)
+                    tmp_path = f.name
+                try:
+                    from ocr_handler import extract_text, detect_claims
+                    text = extract_text(tmp_path)
+                finally:
+                    os.unlink(tmp_path)
+            if text:
+                from ocr_handler import detect_claims
+                self._send_json(detect_claims(text))
+            else:
+                self._send_json({"error": "请提供 text 或 image (base64)"}, 400)
+            return
         if path == "/analyze":
             # 仅分析文本，不调用 LLM
             body = self._read_body()
@@ -859,6 +902,17 @@ class GatewayHandler(BaseHTTPRequestHandler):
             # 调整观察器灵敏度
             if sensitivity != self.observer.sensitivity:
                 self.observer.sensitivity = sensitivity
+
+            # 自动纠正：检测用户消息中的事实矛盾
+            if HAS_CORRECTION:
+                user_text = ''
+                for m in messages:
+                    if m.get('role') == 'user':
+                        user_text = m.get('content', '')
+                if user_text:
+                    correction = generate_correction_prompt(user_text)
+                    if correction:
+                        messages = [{'role': 'system', 'content': correction}] + messages
 
             # 模拟模式或真实推理
             if self.mock_mode:

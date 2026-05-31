@@ -1,3 +1,5 @@
+[![测试](https://github.com/xianyu110/awesome-openclaw-tutorial/actions/workflows/test.yml/badge.svg)](https://github.com/xianyu110/awesome-openclaw-tutorial/actions)
+
 # 觉察推理网关 · Awareness Gateway
 
 架在 LLM 和用户之间的透明代理，实时检测幻觉、对齐漂移、安全风险。

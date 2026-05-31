@@ -18,7 +18,7 @@ COPY config.json .
 COPY kb_user.json .
 
 # 初始化反馈数据库
-RUN python3 -c "import feedback_store; feedback_store.init_db()"
+RUN apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-chi-sim && python3 -c "import feedback_store; feedback_store.init_db()"
 
 EXPOSE 8800
 
