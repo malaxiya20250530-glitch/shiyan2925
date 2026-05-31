@@ -47,7 +47,9 @@ jobs:
           echo "全部模块导入成功"
 
       - name: OCR 演示
-        run: python3 ocr_handler.py --text "朱元璋发明了火锅" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'OCR: {d[\"claims_count\"]}条断言')"
+        run: |
+          python3 ocr_handler.py --text '朱元璋发明了火锅' > /tmp/ocr.json
+          python3 -c 'import json; d=json.load(open("/tmp/ocr.json")); print("OCR:", d.get("claims_count",0), "claims")'
 
       - name: Gateway 启动
         run: |
