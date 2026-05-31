@@ -1,11 +1,28 @@
-feedback.db
-awareness_gateway.log
-*.pyc
+# 构建产物
+dist/
+*.egg-info/
 __pycache__/
-.ollama/
-.codex/
-military_news.txt
-web_cache.db
-build/
+*.pyc
+*.pyo
+
+# 运行时
+*.log
+*.db-journal
+dashboard.log
+
+# 大型二进制
+*.tar.gz
 *.so
-*.c
+*.pyd
+
+# 加密密钥（不可提交）
+_encrypt_key
+_encrypt_key.bak
+
+# IDE
+.vscode/
+.idea/
+
+# 系统
+.DS_Store
+Thumbs.db
