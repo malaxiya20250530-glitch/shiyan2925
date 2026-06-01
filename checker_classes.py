@@ -47,7 +47,7 @@ def _negation_same_subject(claim, fact, claim_pat, fact_pat):
 
 @checker
 class InfinityChecker(Checker):
-    weight = 0.8  # F1 ≈ 0.8
+    weight = 0.82  # F1 ≈ 0.8
     """检查: 声称无穷 vs 事实有限 → 矛盾"""
     def check(self, claim: str, fact: str, engine=None) -> Optional[tuple]:
         """执行检查，返回 (verdict, confidence) 或 None"""
@@ -60,7 +60,7 @@ class InfinityChecker(Checker):
 
 @checker
 class NegationChecker(Checker):
-    weight = 0.88  # F1 ≈ 0.88
+    weight = 0.83  # F1 ≈ 0.88
     """检查: 否定模式匹配 → 矛盾"""
     def check(self, claim: str, fact: str, engine=None) -> Optional[tuple]:
         """执行检查，返回 (verdict, confidence) 或 None"""
@@ -122,7 +122,7 @@ class NegationChecker(Checker):
 
 @checker
 class YearConflictChecker(Checker):
-    weight = 0.66  # F1 ≈ 0.66
+    weight = 0.92  # F1 ≈ 0.66
     """检查: 年份冲突 — 事件年份/生卒范围/单年溢出"""
     _EVENT_GROUPS = {
         "birth": ["出生", "生于", "诞辰", "诞生"],
@@ -176,7 +176,7 @@ class YearConflictChecker(Checker):
 
 @checker
 class NumericConflictChecker(Checker):
-    weight = 0.7  # F1 ≈ 0.7
+    weight = 0.90  # F1 ≈ 0.7
     """检查: 同度量数值偏差 > 8% → 矛盾"""
     def check(self, claim: str, fact: str, engine=None) -> Optional[tuple]:
         """检查: 数值冲突 — 实体绑定 + 年份事件类型验证"""
@@ -219,7 +219,7 @@ class NumericConflictChecker(Checker):
 
 @checker
 class OverlapChecker(Checker):
-    weight = 0.75  # F1 ≈ 0.75
+    weight = 0.55  # F1 ≈ 0.75
     """检查: 字符重叠 > 55% 且无否定悖反 → 验证通过"""
     def check(self, claim: str, fact: str, engine=None) -> Optional[tuple]:
         """执行检查，返回 (verdict, confidence) 或 None"""
@@ -238,7 +238,7 @@ class OverlapChecker(Checker):
 
 @checker
 class TemporalOrderChecker(Checker):
-    weight = 0.84  # F1 ≈ 0.84
+    weight = 0.80  # F1 ≈ 0.84
     """检查: 时间顺序矛盾 — 将人物/事件放在错误朝代 → 矛盾"""
     ERA_MAP = {
         "秦": (-221, -207), "汉": (-202, 220), "三国": (220, 280),
@@ -293,7 +293,7 @@ class TemporalOrderChecker(Checker):
 
 @checker
 class LocationConflictChecker(Checker):
-    weight = 0.77  # F1 ≈ 0.77
+    weight = 0.85  # F1 ≈ 0.77
     """检查: 地点归属矛盾 — 地标放错位置 → 矛盾"""
     LOC_MAP = {
         "长城": ["北京", "河北", "甘肃", "山西", "中国", "北方"],
@@ -330,7 +330,7 @@ class LocationConflictChecker(Checker):
 
 @checker
 class GraphContradictionChecker(Checker):
-    weight = 0.87  # F1 ≈ 0.87
+    weight = 0.78  # F1 ≈ 0.87
     """检查: 知识图谱实体关系推理 → 矛盾（最后兜底检查器）"""
     def check(self, claim: str, fact: str, engine=None) -> Optional[tuple]:
         """执行检查，返回 (verdict, confidence) 或 None"""
