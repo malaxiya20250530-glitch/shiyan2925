@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 李刚 (hubeiligang420@gmail.com)
+# Copyright (c) 2025 李桥 (hubeiligang420@gmail.com)
 # 专有软件 — 保留所有权利。禁止复制、修改、分发、逆向工程。
 # Proprietary Software — ALL RIGHTS RESERVED.
 #
@@ -27,6 +27,8 @@ from pathlib import Path
 import time
 from dataclasses import dataclass, field
 from typing import Optional
+from checker_registry import Checker
+import checker_classes  # 触发 @checker 装饰器自动注册所有检查器
 
 try:
     from logger import log
@@ -90,9 +92,10 @@ KNOWLEDGE_BASE = {
     "火锅": {"facts": ["火锅的历史可追溯到战国时期","汉代已有类似火锅的青铜器皿","火锅不是单一起源"], "source": "中国饮食文化史"},
     "造纸": {"facts": ["造纸术是中国古代四大发明之一","西汉时期已有麻纸，东汉蔡伦改进"], "source": "后汉书"},
     "印刷": {"facts": ["雕版印刷术发明于唐代","毕昇于北宋庆历年间发明活字印刷术","古腾堡于 1450 年在欧洲发明铅活字印刷"], "source": "印刷史"},
+    "内阁制度": {"facts": ["内阁制度是明朝永乐年间设立的不是朱元璋设立的","朱元璋时期废除的是丞相制度设立了锦衣卫","内阁首辅出现在明朝中后期张居正最著名"], "source": "明史·职官志"},
     "火药": {"facts": ["火药是中国古代四大发明之一，唐代已有记载","火药通过阿拉伯传入欧洲"], "source": "中国科学技术史"},
     "指南针": {"facts": ["指南针是中国古代四大发明之一","战国时期已有司南，宋代用于航海"], "source": "中国科学技术史"},
-    "朱元璋": {"facts": ["朱元璋是明朝开国皇帝，1328-1398 年","朱元璋没有发明火锅，火锅远早于明代就已存在"], "source": "明史"},
+    "朱元璋": {"facts": ["朱元璋是明朝开国皇帝，1328-1398 年","朱元璋于1368年在应天（今南京）称帝建立明朝","朱元璋没有发明火锅，火锅远早于明代就已存在","朱元璋废除丞相制度设立锦衣卫"], "source": "明史"},
     "发明": {"facts": ["任何声称某人发明了某自然现象的断言都是错误的","四大发明专指造纸术、印刷术、火药、指南针"], "source": "常识"},
     "唯一": {"facts": ["包含唯一的断言几乎总是存在反例","声称某物是唯一的需要极其严格的证明"], "source": "逻辑学"},
     "第一": {"facts": ["声称世界第一的断言需要严格定义和证据","许多第一的宣称在学术上是争议的"], "source": "逻辑学"},
@@ -251,6 +254,30 @@ try:
 except (FileNotFoundError, json.JSONDecodeError, OSError):
     pass  # 用户KB损坏时不影响核心功能
 
+# 合并自动生成的知识库 (kb_core.json)
+try:
+    _core_kb_path = _Path(__file__).parent / "kb_core.json"
+    if _core_kb_path.exists():
+        with open(_core_kb_path) as _f:
+            _core_kb = _json.load(_f)
+        _added = 0
+        for _key, _entry in _core_kb.items():
+            if _key.startswith("_"):
+                continue
+            if _key in KNOWLEDGE_BASE:
+                _existing = set(KNOWLEDGE_BASE[_key]["facts"])
+                for _fct in _entry.get("facts", []):
+                    if _fct not in _existing:
+                        KNOWLEDGE_BASE[_key]["facts"].append(_fct)
+                        _added += 1
+            else:
+                KNOWLEDGE_BASE[_key] = _entry
+                _added += 1
+        log.info("kb_core merged", new_keys=_added)
+except (FileNotFoundError, json.JSONDecodeError, OSError):
+    pass
+
+
 
 
 
@@ -385,7 +412,6 @@ class FactExtractor:
 # ============================================================
 # 锚定引擎
 # ============================================================
-
 class AnchorEngine:
     """多源锚定：本地知识库 + 可选的 Web 搜索"""
 
@@ -430,7 +456,24 @@ class AnchorEngine:
                 anchor_type="knowledge_base",
             )
 
-        # 2. 混合检索：BM25 + TF-IDF 向量（新增）
+        # 2. 混合检索：BM25 + TF-IDF 向量
+        #    快速通道：enable_web=False 时跳过向量检索（KB 已是最佳信源）
+        if not self.enable_web:
+            return VerificationResult(
+                claim=claim.text,
+                verdict="unverifiable",
+                confidence=0.3,
+                evidence="无法在本地知识库中验证此信息",
+                source="",
+                anchor_type="fallback",
+            )
+        # WAL 审计日志
+        try:
+            from wal_logger import log_detection
+            log_detection(claim.text, result.verdict, result.confidence,
+                         result.evidence, result.source)
+        except ImportError:
+            pass
         try:
             from vector_kb import get_hybrid_retriever
             hr = get_hybrid_retriever()
@@ -537,31 +580,52 @@ class AnchorEngine:
                 expanded += " " + target
         return expanded
 
+    # 单字KB键的误匹配过滤：这些常见词含有关键字但语义无关
+    _SINGLE_CHAR_FALSE_WORDS = {
+        "明": ["发明", "说明", "证明", "聪明", "明确", "表明", "声明", "文明", "透明"],
+        "元": ["状元", "元素", "公元", "日元", "单元", "美元", "欧元"],
+        "清": ["清楚", "清洁", "清单", "分清", "清晰", "澄清"],
+        "唐": ["荒唐"],
+        "汉": ["好汉", "汉字", "汉语", "男子汉", "懒汉", "老汉"],
+        "电": ["电话", "电脑", "电视", "电影", "电子", "电器", "闪电"],
+        "宋": [], "秦": [], "三国": [], "发明": [], "唯一": [], "第一": [],
+    }
+
     def _key_matches_claim(self, key_lower: str, expanded_text: str, text_lower: str, entities: list[str]) -> bool:
         """卫语句: 判断KB键是否匹配当前断言 — 单层"""
+        # 单字键：排除嵌入常见词的情况（如"发明"中的"明"）
+        if len(key_lower) == 1 and key_lower in self._SINGLE_CHAR_FALSE_WORDS:
+            for fw in self._SINGLE_CHAR_FALSE_WORDS[key_lower]:
+                if fw in text_lower:
+                    return False
+        # 键出现在"在X之前/之后"语境中 → 主语不是X，不匹配
+        # 例如"在瓦特之前，纽科门发明了蒸汽机" → 说的是纽科门，不是瓦特
+        if re.search(r'在' + re.escape(key_lower) + r'(?:之前|之后|以前|以后)', text_lower):
+            return False
         return (key_lower in expanded_text 
                 or any(key_lower in e.lower() for e in entities)
                 or (len(key_lower) >= 2 and all(c in text_lower for c in key_lower)))
 
     def _check_facts_against_entry(self, claim_text: str, entry: dict) -> dict:
-        """检查条目所有事实 — 两遍扫描 + 反馈记录"""
-        # 第一遍: 找矛盾
+        """检查条目所有事实 — 收集全部结果取最优（高置信度矛盾优先于低置信度验证）"""
+        best_result = None
         for fact in entry["facts"]:
             v, c = self._compare_with_fact(claim_text, fact)
+            if v == "uncertain":
+                continue
+            if best_result is None:
+                best_result = {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
+                continue
+            # 高置信度矛盾 > 低置信度验证；同置信度矛盾 > 验证
             if v == "contradicted":
-                result = {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
-                self._record_feedback(claim_text, fact, result)
-                return result
-        # 第二遍: 找最佳匹配
-        best_v, best_f, best_c = None, entry["facts"][0], 0
-        for fact in entry["facts"]:
-            v, c = self._compare_with_fact(claim_text, fact)
-            if v == "verified" and not best_v:
-                best_v, best_f, best_c = v, fact, c
-        if best_v:
-            result = {"verdict": best_v, "confidence": best_c, "evidence": best_f, "source": entry["source"]}
-            self._record_feedback(claim_text, best_f, result)
-            return result
+                if best_result["verdict"] != "contradicted" or c > best_result["confidence"]:
+                    best_result = {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
+            elif v == "verified" and best_result["verdict"] != "contradicted":
+                if c > best_result["confidence"]:
+                    best_result = {"verdict": v, "confidence": c, "evidence": fact, "source": entry["source"]}
+        if best_result:
+            self._record_feedback(claim_text, best_result["evidence"], best_result)
+            return best_result
         result = {"verdict": "uncertain", "confidence": 0.5, "evidence": f"相关: {entry['facts'][0][:80]}", "source": entry["source"]}
         self._record_feedback(claim_text, entry["facts"][0], result)
         return result
@@ -580,10 +644,17 @@ class AnchorEngine:
         for key in sorted(KNOWLEDGE_BASE.keys(), key=len, reverse=True):
             if not self._key_matches_claim(key.lower(), expanded, claim.text.lower(), claim.entities):
                 continue
+            # 实体类型验证：跳过类型严重不匹配的 KB 条目
+            entity_conf = self._entity_match_confidence(key, claim.text, key.lower())
+            # 同义词扩展匹配加成：KB键已在扩展文本中 → 提高置信度
+            if key.lower() in expanded:
+                entity_conf = min(entity_conf + 0.25, 1.0)
+            if entity_conf < 0.4:
+                continue
             result = self._check_facts_against_entry(claim.text, KNOWLEDGE_BASE[key])
             if result["verdict"] != "uncertain":
                 return result
-            return result
+            # uncertain → 继续尝试下一个 key
         return self._semantic_match_kb(claim)
     def _compute_similarity(self, text: str, key: str) -> float:
         """多粒度n-gram Jaccard + 字符重叠相似度"""
@@ -610,6 +681,121 @@ class AnchorEngine:
         # n-gram权重高于字符重叠（n-gram捕捉语序信息）
         return ngram_score * 0.65 + char_overlap * 0.35
 
+    # ── 实体类型推断与置信度 ──────────────────────────
+
+    # 实体类型推断正则模式
+    _PERSON_PATTERNS = [
+        re.compile(r'(出生于?|生于|逝于|卒于|去世于)\s*\d'),
+        re.compile(r'是.{0,4}(人|科学家|文学家|音乐家|哲学家|画家|诗人|作家|数学家|物理学家|化学家|生物学家|发明家|军事家|政治家|皇帝|总统|总理|国王|丞相)'),
+        re.compile(r'(发明了?|发现了?|提出了?|创立了?|创作了?|发表了?|获得了?)'),
+        re.compile(r'(的(?:学生|老师|父亲|母亲|儿子|女儿|朋友|对手))'),
+    ]
+    _PLACE_PATTERNS = [
+        re.compile(r'(位于|坐落于|地处|在.{0,4}(?:省|市|县|国|洲|地区|边境))'),
+        re.compile(r'(首都是?|都城.{0,2}[是为])'),
+        re.compile(r'(建于?|建造于?|始建于?|落成于?)\s*\d'),
+        re.compile(r'(是.{0,4}(?:城市|国家|首都|建筑|宫殿|寺庙|山峰|河流|海洋|沙漠|森林))'),
+    ]
+    _EVENT_PATTERNS = [
+        re.compile(r'(爆发于?|发生于?|始于?|结束于?|持续了?)\s*\d'),
+        re.compile(r'(是.{0,4}(?:战争|革命|运动|事件|灾难|发现|发明|会议|奥运会))'),
+        re.compile(r'(导火索|标志.{0,2}是|拉开.{0,2}序幕)'),
+    ]
+    _ORG_PATTERNS = [
+        re.compile(r'(公司|企业|集团|组织|机构|协会|委员会|基金会)'),
+        re.compile(r'(成立于?|注册于?)\s*\d'),
+    ]
+
+    def _infer_entity_type(self, text: str, entity_name: str) -> tuple:
+        """从文本上下文推断实体类型，返回 (type, confidence)
+        类型: person / place / event / organization / concept / unknown"""
+        idx = text.lower().find(entity_name.lower())
+        if idx < 0:
+            return ("unknown", 0.0)
+        start = max(0, idx - 30)
+        end = min(len(text), idx + len(entity_name) + 30)
+        context = text[start:end]
+
+        scores = {}
+        for pat in self._PERSON_PATTERNS:
+            if pat.search(context):
+                scores["person"] = scores.get("person", 0) + 1
+        for pat in self._PLACE_PATTERNS:
+            if pat.search(context):
+                scores["place"] = scores.get("place", 0) + 1
+        for pat in self._EVENT_PATTERNS:
+            if pat.search(context):
+                scores["event"] = scores.get("event", 0) + 1
+        for pat in self._ORG_PATTERNS:
+            if pat.search(context):
+                scores["organization"] = scores.get("organization", 0) + 1
+
+        if not scores:
+            if len(entity_name) <= 2:
+                return ("concept", 0.3)
+            return ("unknown", 0.2)
+
+        best_type = max(scores, key=scores.get)
+        best_count = scores[best_type]
+        total = sum(scores.values())
+        confidence = min(best_count / max(total, 1), 0.85)
+        return (best_type, confidence)
+
+    def _kb_entry_type(self, key: str, entry: dict) -> str:
+        """从 KB 条目推断类型"""
+        source = entry.get("source", "")
+        facts = entry.get("facts", [])
+        all_text = f"{key} {' '.join(facts[:3])}"
+
+        source_type_map = {
+            "史记": "event", "汉书": "event", "旧唐书": "event", "资治通鉴": "event",
+        }
+        if source in source_type_map:
+            return source_type_map[source]
+
+        inferred, _ = self._infer_entity_type(all_text, key)
+        if inferred != "unknown":
+            return inferred
+
+        if any(w in all_text for w in ["位于", "建于", "首都", "城市", "山峰", "河流"]):
+            return "place"
+        if any(w in all_text for w in ["出生于", "发明", "提出", "创作"]):
+            return "person"
+        if any(w in all_text for w in ["爆发", "战争", "革命", "运动", "始于"]):
+            return "event"
+
+        return "concept"
+
+    def _entity_match_confidence(self, kb_key: str, text: str, kb_key_lower: str) -> float:
+        """计算 KB 键与文本中实体的匹配置信度，综合文本相似度 + 类型兼容性"""
+        text_lower = text.lower()
+        exact_match = kb_key_lower in text_lower
+
+        text_type, text_type_conf = self._infer_entity_type(text, kb_key)
+        entry = KNOWLEDGE_BASE.get(kb_key, {})
+        kb_type = self._kb_entry_type(kb_key, entry)
+
+        type_compat = self._type_compatibility(text_type, kb_type)
+
+        base = 0.6 if exact_match else 0.3
+        type_weight = 0.4
+        score = base + type_weight * type_compat * text_type_conf
+        return min(score, 1.0)
+
+    @staticmethod
+    def _type_compatibility(text_type: str, kb_type: str) -> float:
+        """两个实体类型的兼容性评分"""
+        if text_type == kb_type:
+            return 1.0
+        if text_type == "unknown" or kb_type == "unknown":
+            return 0.6
+        if text_type == "concept" or kb_type == "concept":
+            return 0.5
+        incompat_pairs = [("person", "place"), ("person", "event"), ("place", "event")]
+        if (text_type, kb_type) in incompat_pairs or (kb_type, text_type) in incompat_pairs:
+            return 0.2
+        return 0.4
+
     def _find_best_match(self, text_lower: str) -> tuple:
         """找到最相似的KB条目 — 多粒度 + 关键词权重提升"""
         best_score, best_key, best_entry = 0, None, None
@@ -627,9 +813,17 @@ class AnchorEngine:
                 if kw == key_lower:
                     score = min(score + 0.2, 1.0)
                     break
+                    break
+                    # 实体类型匹配置信度加权
+                    entity_conf = self._entity_match_confidence(key, text_lower, key_lower)
+                    score = score * (0.7 + 0.3 * entity_conf)
             if score > best_score:
                 best_score, best_key, best_entry = score, key, entry
         return best_score, best_key, best_entry
+
+    # 通用规则条目：这些KB键本身是抽象规则而非具体事实
+    # 语义匹配时需要更高阈值，避免误匹配到叙事性claim
+    _GENERIC_KEYS = {"发明", "唯一", "第一"}
 
     def _semantic_match_kb(self, claim: FactualClaim) -> dict:
         """语义回退匹配 — 多粒度相似度 + 自适应阈值"""
@@ -645,6 +839,17 @@ class AnchorEngine:
         else:
             threshold = 0.12
         
+        # 通用规则条目需要更高阈值（避免"故事/传说"语境误匹配）
+        if best_key in self._GENERIC_KEYS:
+            threshold = max(threshold, 0.40)
+            # 实体类型验证：类型不匹配时提高阈值
+            if best_key:
+                entity_conf = self._entity_match_confidence(best_key, text_lower, best_key.lower())
+                if entity_conf < 0.5:
+                    threshold = max(threshold, 0.35)
+                elif entity_conf < 0.7:
+                    threshold = max(threshold, 0.22)
+        
         if best_score < threshold:
             return {"verdict": "uncertain", "confidence": 0, "evidence": "", "source": ""}
         
@@ -652,181 +857,46 @@ class AnchorEngine:
         result["semantic_match"] = {"key": best_key, "score": round(best_score, 3)}
         return result
 
-    # --- 事实比对子检查器 (每个单一职责) ---
-
-    # 检查器优先级列表 (按执行顺序)
-    _PRIORITY_CHECKERS = [
-        "_check_infinity",
-        "_check_negation",
-        "_check_year_conflict",
-        "_check_numeric_conflict",
-        "_check_temporal_order",
-        "_check_location_conflict",
-        "_check_overlap",
-        "_check_graph_contradiction",  # 知识图谱推理（最后兜底）
-    ]
-
-    def _check_infinity(self, claim: str, fact: str):
-        """检查: 声称无穷 vs 事实有限 → 矛盾"""
-        if re.search(r'无穷|无限', claim) and re.search(r'有限|每秒|公里|不是.*无穷', fact):
-            return ("contradicted", 0.85)
-        return None
-
-    def _check_negation(self, claim: str, fact: str):
-        """检查: 否定模式匹配 → 矛盾"""
-        # 先做通用正反对立检查: 如果fact包含否定词且与claim共享关键词 → 矛盾
-        if re.search(r'不是|没有|并非|不可以|不能|不会|不在', fact):
-            # 提取 claim 中紧接在 是/能/会/可以 后面的词
-            key_m = re.search(r'(?:是|能|会|可以)(.{1,6}?)(?:的|。|，|$)', claim)
-            if key_m:
-                key_word = key_m.group(1)
-                if key_word and re.search(r'(?:不是|没有|并非|不可以|不能|不会|不在).*' + re.escape(key_word), fact):
-                    return ("contradicted", 0.85)
-        patterns = [
-            (r"(?:发明了|创造了|创建了)", r"(?:不是|没有|并非).*创[造建]|.*发明"),
-            (r"第一", r"(?:不是|没有|维京|更早|最后)"),
-            (r"(?:最好|最大)", r"(?:不是|没有|并非)"),
-            (r"同一个", r"任何.*关系"),
-            (r"会导致", r"不会导致"),
-            (r"就是", r"不是.*同一个"),
-            (r"能", r"不能"),
-            (r"可以", r"不可以|不能"),
-            (r"一定会", r"不会|不一定"),
-            (r"按原子量", r"不是原子量|按原子序数"),
-            (r"被苹果砸", r"没有被苹果"),
-        ]
-        for cp, fp in patterns:
-            if re.search(cp, claim) and re.search(fp, fact):
-                return ("contradicted", 0.85)
-        return None
-
-    def _check_year_conflict(self, claim: str, fact: str):
-        """检查: 同年份不同数值 → 矛盾"""
-        cy, fy = re.findall(r"\d{3,4}", claim), re.findall(r"\d{3,4}", fact)
-        if not cy or not fy:
-            return None
-        event_words = ["建立","灭亡","发布","创建","发明","诞生"]
-        if any(v in claim and v in fact for v in event_words):
-            if any(c != f for c in cy for f in fy):
-                return ("contradicted", 0.9)
-        return None
-
-    def _check_numeric_conflict(self, claim: str, fact: str):
-        """检查: 同度量数值偏差 > 8% → 矛盾 — 扁平化版本"""
-        cn = re.findall(r"\d+\.?\d*", claim)
-        fn = re.findall(r"\d+\.?\d*", fact)
-        if not cn or not fn:
-            return None
-        unit_re = r"米|公里|千米|年|岁|个|万"
-        if not (re.search(unit_re, claim) and re.search(unit_re, fact)):
-            return None
-        # 提取为独立比较逻辑
-        return self._compare_number_pairs(cn, fn)
-
-    def _compare_number_pairs(self, nums_a: list[str], nums_b: list[str]):
-        """卫语句: 逐对比较数值 — 单层"""
-        for a in nums_a:
-            for b in nums_b:
-                if self._nums_conflict(a, b):
-                    return ("contradicted", 0.88)
-        return None
-
-    def _nums_conflict(self, a: str, b: str) -> bool:
-        """卫语句: 两个数值是否冲突 (>8%偏差)"""
-        try:
-            return abs(float(a) - float(b)) / max(float(b), 1) > 0.08
-        except ValueError:
-            return False
-
-    def _check_overlap(self, claim: str, fact: str):
-        """检查: 字符重叠 > 55% → 验证通过"""
-        if re.search(r'不是|没有|并非|更早', fact):
-            return None
-        cs, fs = set(claim), set(fact)
-        if len(cs & fs) / max(len(cs), 1) > 0.55:
-            return ("verified", 0.7)
-        return None
-
-    def _check_temporal_order(self, claim: str, fact: str):
-        """检查: 时间顺序矛盾 — 将人物/事件放在错误朝代 → 矛盾"""
-        era_map = {
-            "秦": (-221, -207), "汉": (-202, 220), "三国": (220, 280),
-            "唐": (618, 907), "宋": (960, 1279), "元": (1271, 1368),
-            "明": (1368, 1644), "清": (1644, 1912),
-        }
-        person_era = {
-            "蔡伦": "汉", "张衡": "汉", "诸葛亮": "三国", "曹操": "三国",
-            "李白": "唐", "杜甫": "唐", "苏轼": "宋", "毕昇": "宋",
-            "岳飞": "宋", "成吉思汗": "元", "忽必烈": "元",
-            "朱元璋": "明", "郑和": "明", "康熙": "清", "乾隆": "清",
-            "林则徐": "清", "詹纳": "清",  # 1796年对应清朝
-        }
-        for person, era in person_era.items():
-            if person in claim:
-                for era_name in era_map:
-                    if era_name in claim and era_name != era:
-                        return ("contradicted", 0.88)
-        return None
-
-    def _check_location_conflict(self, claim: str, fact: str):
-        """检查: 地点归属矛盾 — 地标放错位置 → 矛盾"""
-        loc_map = {
-            "长城": ["北京", "河北", "甘肃", "山西", "中国", "北方"],
-            "故宫": ["北京", "中国"],
-            "兵马俑": ["西安", "陕西", "中国"],
-            "富士山": ["日本"],
-            "金字塔": ["埃及", "开罗"],
-            "埃菲尔铁塔": ["法国", "巴黎"],
-            "自由女神像": ["美国", "纽约"],
-            "大本钟": ["英国", "伦敦"],
-            "泰姬陵": ["印度"],
-            "悉尼歌剧院": ["澳大利亚", "悉尼"],
-            "大峡谷": ["美国", "亚利桑那"],
-        }
-        all_places = [
-            "北京", "上海", "广州", "深圳", "成都", "重庆", "武汉", "南京", "杭州", "西安",
-            "四川", "云南", "西藏", "新疆", "河南", "河北",
-            "日本", "韩国", "朝鲜", "泰国", "越南", "印度", "俄罗斯",
-            "美国", "英国", "法国", "德国", "意大利", "西班牙", "巴西", "澳大利亚",
-            "埃及", "南非",
-            "纽约", "伦敦", "巴黎", "东京", "柏林", "罗马", "悉尼", "开罗", "莫斯科",
-            "非洲", "欧洲", "亚洲", "南美", "南极", "月球",
-        ]
-        for landmark, correct_locs in loc_map.items():
-            if landmark in claim:
-                for place in all_places:
-                    if place in claim and place not in correct_locs:
-                        return ("contradicted", 0.85)
-        return None
-
-    def _check_graph_contradiction(self, claim: str, fact: str):
-        """检查: 知识图谱实体关系推理 → 矛盾（最后兜底检查器）"""
-        reasoner = self._get_graph_reasoner()
-        if reasoner is None:
-            return None
-        result = reasoner.infer_contradiction(claim)
-        if result and result.get("verdict") == "contradicted":
-            return ("contradicted", result.get("confidence", 0.75))
-        return None
-
     def _compare_with_fact(self, claim: str, fact: str) -> tuple:
-        """反馈优先 + 责任链: 先查自进化库 → 再跑检查器"""
+        """反馈优先 + 加权责任链: 先查自进化库 → 收集所有检查器结果 → 加权最优"""
+        # 第零层: 自我验证 — claim和fact相同则直接verified
+        if claim.strip() == fact.strip():
+            return ("verified", 0.95)
         # 第一层: 查询自进化反馈库
         if self.enable_feedback:
             record = self.feedback.find_applied_correction(claim, fact)
             if record:
                 log.debug("feedback hit", claim=claim[:40])
                 return (record["verdict"], record["confidence"])
-        # 第二层: 责任链检查器
-        for method_name in self._PRIORITY_CHECKERS:
-            check = getattr(self, method_name)
-            result = check(claim, fact)
+        # 第二层: 责任链检查器 — 收集所有结果后加权决策
+        results = []  # [(checker_name, verdict, confidence, weight)]
+        for checker_cls in Checker.registry:
+            checker_inst = checker_cls()
+            weight = getattr(checker_cls, 'weight', 1.0)
+            result = checker_inst.check(claim, fact, engine=self)
             if result:
-                log.debug("checker hit", checker=method_name,
-                          verdict=result[0], claim=claim[:40])
-                return result
-        log.debug("all checkers miss", claim=claim[:40])
-        return ("uncertain", 0.5)
+                verdict, confidence = result
+                weighted_score = weight * confidence
+                results.append((checker_cls.__name__, verdict, confidence, weight, weighted_score))
+                log.debug("checker hit", checker=checker_cls.__name__,
+                          verdict=verdict, weight=weight, weighted_score=round(weighted_score, 3))
+        if not results:
+            log.debug("all checkers miss", claim=claim[:40])
+            return ("uncertain", 0.5)
+        # 加权决策规则:
+        # 1. 如果存在高权重(≥0.85)检查器命中 → 优先采用
+        high_weight = [(n, v, c, w, ws) for n, v, c, w, ws in results if w >= 0.85]
+        if high_weight:
+            best = max(high_weight, key=lambda x: x[4])  # 按 weighted_score
+            log.debug("weighted decision (high-weight)", checker=best[0], score=round(best[4], 3))
+            return (best[1], best[2])
+        # 2. 否则取加权分数最高者，但低 confidence 的矛盾不予采信
+        best = max(results, key=lambda x: x[4])
+        if best[1] == "contradicted" and best[2] < 0.65:
+            log.debug("weighted decision (low confidence suppressed)", checker=best[0])
+            return ("uncertain", 0.5)
+        log.debug("weighted decision", checker=best[0], score=round(best[4], 3))
+        return (best[1], best[2])
 
     def _record_feedback(self, claim: str, fact: str, result: dict) -> None:
         """记录反馈（跳过已有记录避免重复）"""

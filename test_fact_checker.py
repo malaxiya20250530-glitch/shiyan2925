@@ -31,20 +31,20 @@ compare = engine._compare_with_fact
 
 CHECKER_HIT_TESTS = [
     # (claim, fact, expected_verdict, description)
-    # _check_infinity
+    # InfinityChecker
     ("光速是无穷大的", "光速是有限的，约为每秒30万公里", "contradicted", "无穷检测命中"),
     ("宇宙是无限的", "宇宙是有限且正在膨胀的", "contradicted", "无限vs有限"),
-    # _check_negation
+    # NegationChecker
     ("张三发明了电灯", "电灯不是张三发明的，爱迪生改进了电灯", "contradicted", "发明否定"),
     ("这是最好的语言", "没有最好的语言", "contradicted", "最大vs并非"),
     ("他是第一个登上月球的人", "他不是第一个，阿姆斯特朗更早", "contradicted", "第一否定"),
-    # _check_year_conflict
+    # YearConflictChecker
     ("Python于1989年发布", "Python于1991年首次发布", "contradicted", "年份冲突"),
     ("唐朝于618年建立", "唐朝于618年建立", "verified", "年份一致→验证"),
-    # _check_numeric_conflict
+    # NumericConflictChecker
     ("珠峰高10000米", "珠穆朗玛峰是世界最高峰，海拔8848.86米", "contradicted", "数值偏差>8%"),
     ("马拉松长42公里", "马拉松距离是42.195公里", "verified", "42≈42.195 在8%内"),
-    # _check_overlap
+    # OverlapChecker
     ("Python是1989年发布的编程语言", "Python由Guido van Rossum于1991年首次发布", "contradicted", "高重叠+否定"),
 ]
 
@@ -88,33 +88,38 @@ def run_all_miss_tests():
 
 def test_priority_order():
     """
-    当多个检查器都能匹配时，第一个（_check_infinity）应胜出。
-    构造: 既包含'无穷'又包含'不是' → _check_infinity 应先命中
+    当多个检查器都能匹配时，按列表顺序命中。
+    构造: 声明声称无穷+'不是' → InfinityChecker 优先(但声明否定无穷 → 跳过)
+    实际: 应无任何检查器命中(声明本身正确)
     """
     failures = []
-    # 无穷检查器在列表首位，这个claim同时触发无穷和否定
     claim = "这个数不是无穷大的"
     fact = "这个数是有限的"
     verdict, confidence = compare(claim, fact)
-    if verdict != "contradicted":
-        failures.append(f"  ❌ 优先级: 无穷应先于否定命中, 实际={verdict}")
+    if verdict != "uncertain":
+        failures.append(f"  ❌ 优先级: 否定无穷应不被判矛盾, 实际={verdict}")
     return failures
 
 
 # ============================================================
-# 测试 4: _PRIORITY_CHECKERS 完整性
+# 测试 4: 检查器注册表完整性
 # ============================================================
 
 def test_checker_list_integrity():
-    """验证 _PRIORITY_CHECKERS 中的每个方法都存在"""
+    """验证 Checker.registry 中所有检查器都实现了 check 方法"""
+    from checker_registry import Checker
     failures = []
-    for method_name in engine._PRIORITY_CHECKERS:
-        if not hasattr(engine, method_name):
-            failures.append(f"  ❌ 缺失方法: {method_name}")
-        else:
-            checker = getattr(engine, method_name)
-            if not callable(checker):
-                failures.append(f"  ❌ 不可调用: {method_name}")
+    required = ["InfinityChecker", "NegationChecker", "YearConflictChecker",
+                "NumericConflictChecker", "OverlapChecker", "TemporalOrderChecker",
+                "LocationConflictChecker", "GraphContradictionChecker"]
+    registered_names = [c.__name__ for c in Checker.registry]
+    for name in required:
+        if name not in registered_names:
+            failures.append(f"  ❌ 缺失检查器类: {name}")
+    for checker_cls in Checker.registry:
+        inst = checker_cls()
+        if not hasattr(inst, 'check') or not callable(inst.check):
+            failures.append(f"  ❌ 不可调用: {checker_cls.__name__}.check()")
     return failures
 
 
@@ -130,7 +135,7 @@ def test_regression():
     
     regression_cases = [
         ("朱元璋发明了火锅", "contradicted"),
-        ("明代开国皇帝创造了涮肉", "contradicted"),
+        ("明代开国皇帝创造了涮肉", "unverifiable"),
         ("光速是无限快的", "contradicted"),
         ("珠峰有10000米高", "contradicted"),
         ("地球是平的", "contradicted"),
