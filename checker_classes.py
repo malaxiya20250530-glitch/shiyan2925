@@ -66,6 +66,21 @@ class NegationChecker(Checker):
         """执行检查，返回 (verdict, confidence) 或 None"""
         # 前向引用：_negation_same_subject 在导入此模块前已定义
 
+        # 通用否定检测: fact 说"没有X/不是X/不存在X"
+        # → 若 claim 中不包含对X的否定且X或X的字符重排出现在claim中 → 矛盾
+        general_neg = re.search(r'(?:没有|不是|并非|不存在|不在|不|没)\s*(.{1,8}?)(?:[，。、；的]|$)', fact)
+        if general_neg:
+            neg_entity = general_neg.group(1).strip()
+            if neg_entity and len(neg_entity) >= 1:
+                # 精确匹配或字符级回退 (处理"效果"↔"有效"的情况)
+                entity_in_claim = (neg_entity in claim or 
+                    (len(neg_entity) >= 2 and 
+                     sum(1 for c in neg_entity if c in claim) / len(neg_entity) >= 0.6))
+                if entity_in_claim:
+                    # 确认 claim 中没有否定该实体（避免双重否定）
+                    if not re.search(
+                        r'(?:没有|不是|并非|不存在|不在|不|没)\s*' + re.escape(neg_entity), claim):
+                        return ("contradicted", 0.78)
 
         if re.search(r'不是|没有|并非|不可以|不能|不会|不在', fact):
             # 主语验证: claim和fact必须共享至少一个2字以上的实词
