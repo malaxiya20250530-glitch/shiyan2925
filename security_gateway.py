@@ -18,6 +18,7 @@ from hallucination_detector import HallucinationDetector
 from bias_detector import BiasDetector
 from content_filter import ContentFilter
 from leak_scanner import LeakScanner
+from observability_platform import MetricsCollector, AlertEngine, ReportGenerator, AuditMetric
 
 
 class SecurityGateway:
@@ -28,6 +29,10 @@ class SecurityGateway:
         self.bias = BiasDetector()
         self.content = ContentFilter()
         self.leak = LeakScanner()
+        # 可观测性
+        self.metrics = MetricsCollector()
+        self.alerts = AlertEngine()
+        self.reporter = ReportGenerator(self.metrics, self.alerts)
 
     def audit(self, text: str) -> dict:
         """全面安全审计，返回统一报告"""
@@ -91,6 +96,17 @@ class SecurityGateway:
             report["status"] = "warning"
             report["reason"] = f"幻觉率 {h_result.hallucination_ratio:.0%}，建议人工复核"
 
+        # 记录可观测性指标
+        self.metrics.record(AuditMetric(
+            timestamp=time.time(),
+            status=report["status"],
+            latency_ms=0,
+            text_length=len(text) if isinstance(text, str) else 0,
+            leak_count=len(leak_results),
+            content_count=len(all_content),
+            bias_count=len(bias_results),
+            hallucination_ratio=h_result.hallucination_ratio,
+        ))
         return report
 
 
@@ -118,6 +134,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._json(200, stats)
         elif self.path == "/":
             self._serve_index()
+        elif self.path.startswith("/obs"):
+            self._handle_obs()
         else:
             self._json(404, {"error": "not found"})
 
@@ -157,6 +175,27 @@ class GatewayHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False, default=str).encode())
+
+    def _handle_obs(self):
+        path = self.path
+        gw = self.gateway
+        if path == "/obs/snapshot":
+            snap = gw.metrics.snapshot(3600)
+            triggered = gw.alerts.evaluate(snap)
+            snap["alerts"] = triggered
+            self._json(200, snap)
+        elif path == "/obs/trend":
+            self._json(200, {"trend": gw.metrics.hourly_trend(24)})
+        elif path == "/obs/report/daily":
+            self._json(200, {"report": gw.reporter.daily_report()})
+        elif path == "/obs/report/weekly":
+            self._json(200, {"report": gw.reporter.weekly_report()})
+        elif path == "/obs/report/json":
+            self._json(200, gw.reporter.to_json())
+        elif path == "/obs/alerts":
+            self._json(200, {"alerts": gw.alerts.history})
+        else:
+            self._json(404, {"error": "unknown obs endpoint"})
 
     def _serve_index(self):
         html = """<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8">
