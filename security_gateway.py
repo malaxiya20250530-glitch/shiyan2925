@@ -20,6 +20,7 @@ from content_filter import ContentFilter
 from leak_scanner import LeakScanner
 from observability_platform import MetricsCollector, AlertEngine, ReportGenerator, AuditMetric
 from audit_trail import AuditTrail, ComplianceReport, AccessControl, CertificationChecklist
+from security_hardener import InputValidator, RateLimiter, IPBlocker, SecurityHeaders, SecurityAuditor
 
 
 class SecurityGateway:
@@ -37,6 +38,9 @@ class SecurityGateway:
         self.audit_trail = AuditTrail()
         self.access = AccessControl()
         self.certification = CertificationChecklist()
+        self.validator = InputValidator()
+        self.rate_limiter = RateLimiter()
+        self.ip_blocker = IPBlocker()
 
     def audit(self, text: str) -> dict:
         """全面安全审计，返回统一报告"""
@@ -134,6 +138,7 @@ class GatewayHandler(BaseHTTPRequestHandler):
                 "bias_patterns": self.gateway.bias.stats,
                 "content_patterns": self.gateway.content.stats,
                 "leak_scanners": self.gateway.leak.stats,
+            "security_score": SecurityAuditor.audit_codebase(str(ROOT)),
             }
             self._json(200, stats)
         elif self.path == "/":
@@ -146,9 +151,31 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "not found"})
 
     def _handle_audit(self):
+        # IP 封禁检查
+        client_ip = self.client_address[0]
+        if self.gateway.ip_blocker.is_blocked(client_ip):
+            self._json(403, {"error": "IP 已被封禁"})
+            return
+        # 速率限制
+        api_key = self.headers.get("Authorization", "anonymous")
+        ok, msg = self.gateway.rate_limiter.allow(api_key)
+        if not ok:
+            self._json(429, {"error": msg})
+            return
         length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
+        try:
+            body = json.loads(self.rfile.read(length))
+        except (json.JSONDecodeError, ValueError) as e:
+            self.gateway.ip_blocker.record_failure(client_ip)
+            self._json(400, {"error": f"JSON 解析失败"})
+            return
         text = body.get("text", body.get("messages", [{}])[-1].get("content", ""))
+        # 输入校验
+        valid, msg = self.gateway.validator.validate_text(text)
+        if not valid:
+            self._json(400, {"error": msg})
+            return
+        text = self.gateway.validator.sanitize(text)
         report = self.gateway.audit(text)
         # 写入审计日志
         api_key = self.headers.get("Authorization", "anonymous")[:30]
