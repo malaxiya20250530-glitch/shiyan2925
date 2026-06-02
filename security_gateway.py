@@ -19,6 +19,7 @@ from bias_detector import BiasDetector
 from content_filter import ContentFilter
 from leak_scanner import LeakScanner
 from observability_platform import MetricsCollector, AlertEngine, ReportGenerator, AuditMetric
+from audit_trail import AuditTrail, ComplianceReport, AccessControl, CertificationChecklist
 
 
 class SecurityGateway:
@@ -33,6 +34,9 @@ class SecurityGateway:
         self.metrics = MetricsCollector()
         self.alerts = AlertEngine()
         self.reporter = ReportGenerator(self.metrics, self.alerts)
+        self.audit_trail = AuditTrail()
+        self.access = AccessControl()
+        self.certification = CertificationChecklist()
 
     def audit(self, text: str) -> dict:
         """全面安全审计，返回统一报告"""
@@ -136,6 +140,8 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._serve_index()
         elif self.path.startswith("/obs"):
             self._handle_obs()
+        elif self.path.startswith("/audit"):
+            self._handle_audit_endpoints()
         else:
             self._json(404, {"error": "not found"})
 
@@ -144,6 +150,10 @@ class GatewayHandler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(length))
         text = body.get("text", body.get("messages", [{}])[-1].get("content", ""))
         report = self.gateway.audit(text)
+        # 写入审计日志
+        api_key = self.headers.get("Authorization", "anonymous")[:30]
+        self.gateway.audit_trail.record("audit_request", api_key,
+            "security_audit", report["status"])
         self._json(200 if report["status"] != "blocked" else 403, report)
 
     def _handle_chat(self):
@@ -196,6 +206,23 @@ class GatewayHandler(BaseHTTPRequestHandler):
             self._json(200, {"alerts": gw.alerts.history})
         else:
             self._json(404, {"error": "unknown obs endpoint"})
+
+
+    def _handle_audit_endpoints(self):
+        path = self.path
+        gw = self.gateway
+        if path == "/audit/log":
+            self._json(200, {"entries": gw.audit_trail.query(hours=24, limit=50)})
+        elif path == "/audit/integrity":
+            ok, msg = gw.audit_trail.verify_integrity()
+            self._json(200, {"integrity": ok, "message": msg})
+        elif path == "/audit/report":
+            report = ComplianceReport(gw.audit_trail).generate("24h")
+            self._json(200, report)
+        elif path == "/audit/compliance":
+            self._json(200, gw.certification.evaluate())
+        else:
+            self._json(404, {"error": "unknown audit endpoint"})
 
     def _serve_index(self):
         html = """<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8">
