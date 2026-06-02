@@ -30,7 +30,7 @@
     "numeric_conflict": 0.848,
     "year_conflict": 0.743
   },
-  "timestamp": "2026-06-02 03:49:36 UTC",
+  "timestamp": "2026-06-02 20:50:00 UTC",
   "key_fixes": [
     "KB dynamic load (hardcoded 155→225 keys)",
     "entity_confidence infrastructure",
@@ -39,8 +39,8 @@
     "_shared_entity bidirectional matching",
     "_compare_with_fact self-verification"
   ],
-  "hallucination_detector.py_sha256": "efcb8bbdf1d3",
-  "checker_classes.py_sha256": "d67977b06a61",
+  "hallucination_detector.py_sha256": "6421c005c339",
+  "checker_classes.py_sha256": "41cf77f6df7f",
   "checker_registry.py_sha256": "d113a6f43ab4",
-  "kb_core.json_sha256": "3f438a871b6f"
+  "kb_core.json_sha256": "41701e1acbe1"
 }
