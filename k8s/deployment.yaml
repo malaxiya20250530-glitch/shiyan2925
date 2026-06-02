@@ -163,10 +163,17 @@ spec:
           failureThreshold: 30
 
         # ── 环境变量 ──
-        envFrom:
-        - secretRef:
-            name: gateway-secrets
         env:
+        - name: DEEPSEEK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gateway-secrets
+              key: DEEPSEEK_API_KEY
+        - name: UPSTREAM_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gateway-secrets
+              key: UPSTREAM_API_KEY
         - name: PYTHONUNBUFFERED
           value: "1"
         - name: CONFIG_PATH
@@ -207,6 +214,13 @@ spec:
       labels:
         app: feedback-store
     spec:
+      # TM-019: 安全上下文 — 非 root 运行
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: store
         image: awareness-gateway:latest
@@ -394,7 +408,8 @@ spec:
     - ipBlock:
         cidr: 0.0.0.0/0
         except:
-        - 169.254.169.254/32  # 禁止云元数据
+        - 169.254.169.254/32  # 禁止 IMDSv1
+        - 169.254.170.2/32   # 禁止 ECS 任务元数据 v2
         - 10.0.0.0/8
         - 172.16.0.0/12
         - 192.168.0.0/16

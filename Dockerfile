@@ -4,6 +4,8 @@ FROM python:3.13-alpine
 LABEL org.opencontainers.image.title="Hallucination Detector Gateway"
 LABEL org.opencontainers.image.description="Zero-dependency LLM hallucination detection middleware with billing & dashboard"
 LABEL org.opencontainers.image.version="3.0.0"
+LABEL com.awareness.security.review="2026-06-02"
+LABEL com.awareness.security.level="production"
 LABEL org.opencontainers.image.authors="Li Qiao"
 LABEL org.opencontainers.image.url="https://github.com/malaxiya20250530-glitch/shiyan2925"
 
@@ -52,5 +54,8 @@ EXPOSE 8800 8080
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8800/health')"
 
+# 安全加固: 只读文件系统 + 能力限制 (需要运行时 --read-only --cap-drop=ALL)
+# 运行: docker run --read-only --cap-drop=ALL --tmpfs /tmp \
+#        -v feedback.db:/app/feedback.db:rw awareness-gateway
 ENTRYPOINT ["python3", "awareness_gateway.py"]
 CMD ["--mock", "--port", "8800"]

@@ -91,8 +91,9 @@ deploy_systemd() {
 
     local SERVICE_FILE="/etc/systemd/system/awareness-gateway.service"
     local WORKDIR="$(pwd)"
+    local TMPFILE="$(mktemp /tmp/awareness-gateway.XXXXXX)"  # TM-023: 安全临时文件
 
-    cat > /tmp/awareness-gateway.service << EOF
+    cat > "$TMPFILE" << EOF
 [Unit]
 Description=觉察推理网关
 After=network.target
@@ -111,7 +112,7 @@ WantedBy=multi-user.target
 EOF
 
     if [ "$(id -u)" -eq 0 ]; then
-        cp /tmp/awareness-gateway.service "$SERVICE_FILE"
+        cp "$TMPFILE" "$SERVICE_FILE" && rm -f "$TMPFILE"
         systemctl daemon-reload
         systemctl enable awareness-gateway
         systemctl start awareness-gateway
@@ -122,8 +123,8 @@ EOF
         fi
     else
         echo "需要 root 权限安装 systemd 服务"
-        echo "已生成: /tmp/awareness-gateway.service"
-        echo "手动安装: sudo cp /tmp/awareness-gateway.service $SERVICE_FILE"
+        echo "已生成: $TMPFILE"
+        echo "手动安装: sudo cp $TMPFILE $SERVICE_FILE"
     fi
 }
 
