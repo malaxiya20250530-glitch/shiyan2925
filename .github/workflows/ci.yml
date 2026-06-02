@@ -17,9 +17,7 @@ on:
 
 jobs:
   regression:
-  workflow_dispatch:
-    runs-on:
-  workflow_dispatch: ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +25,7 @@ jobs:
       - name: 设置 Python
         uses: actions/setup-python@v5
         with:
-          python-version:
-  workflow_dispatch: "3.13"
+          python-version: "3.13"
 
       - name: 验证关键文件 Hash
         run: |
