@@ -1,0 +1,23 @@
+# Phase 2 — 最小化镜像
+__pycache__
+*.pyc
+.git
+*.md
+软著_*
+demo_*
+batch_check.py
+kb_generator.py
+encrypt_source.py
+compiled_awareness.py
+observer_proxy.py
+test_*.py
+!test_fact_checker.py
+cache_stats.py
+trace_exporter.py
+fuzzy_matcher.py
+security.py
+rate_limiter.py
+social_alignment.py
+benchmark/*.txt
+benchmark/*.json
+!benchmark/all.jsonl
