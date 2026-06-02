@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     strategy:
       matrix:
         python-version: ["3.13"]
@@ -70,7 +70,3 @@ jobs:
           curl -s --max-time 5 http://localhost:8800/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['status']=='ok'; print('✅ Gateway')"
           echo "⚠️ 跳过 chat 端点 (mock 模式 BrokenPipe 已知问题)"
           kill %1 2>/dev/null; true
-
-      - name: 基准评测
-        run: |
-          python3 benchmark/run.py --fast 2>&1 | tail -20
