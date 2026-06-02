@@ -28,3 +28,16 @@ _encrypt_key.bak
 Thumbs.db
 .cargo/
 .codex/
+
+# git-crypt 加密排除（这些不需要加密）
+.cache/
+.local/
+.mimo2codex/
+bench_out_*.json
+chaos_out*.json
+*_out.txt
+*_out.json
+scan_out.json
+security_scan.json
+validate_report.json
+mem_test.py
