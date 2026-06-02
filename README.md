@@ -1,169 +1,169 @@
-[![测试](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/test.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
+# 🔍 Hallucination Detector — LLM 幻觉检测中间件
 
-# 觉察推理网关 · Awareness Gateway
+[![CI](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/test.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
+[![Build](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
+[![Python](https://img.shields.io/badge/Python-3.13-blue)](https://python.org)
+[![License](https://img.shields.io/badge/License-Proprietary-red)](LICENSE)
+[![Lines](https://img.shields.io/badge/Code-17K%20lines-brightgreen)](.)
+[![Stars](https://img.shields.io/github/stars/malaxiya20250530-glitch/shiyan2925?style=social)](https://github.com/malaxiya20250530-glitch/shiyan2925)
 
-架在 LLM 和用户之间的透明代理，实时检测幻觉、对齐漂移、安全风险。
+> **零外部依赖** | **14 检查器责任链** | **四级管道检测** | **自进化知识库** | **跨平台加密编译**
+
+一个可独立部署的 LLM 安全中间件。像 CDN 一样接入你的 AI 应用，在大模型输出到达用户之前，拦截其中的幻觉和事实错误。
+
+---
+
+## ⚡ 5 秒体验
+
+```bash
+# 检测一条声明
+python3 hallucination_detector.py "朱元璋发明了火锅"
+```
+输出：
+```
+🔴 [矛盾] 朱元璋发明了火锅
+   证据: 朱元璋是明朝开国皇帝，1328-1398 年
+   来源: 明史
+   可信度: 90%
+```
+
+---
+
+## 🏗️ 架构
 
 ```
-用户 → [觉察网关] → LLM API
-         ├── 事实核查（10 检查器责任链）
-         ├── 对齐检测（情绪 / 压力 / 取悦漂移）
-         └── 安全观察（锚定 / 来源归因 / 一致性）
+用户请求 → awareness_gateway (OpenAI 兼容 API)
+              ├─ BillingMiddleware  ← 计费 + 限流
+              ├─ ObserverSecurity   ← 安全中间件
+              ├─ HallucinationDetector
+              │    ├─ 14 个 Checker 加权责任链
+              │    ├─ Knowledge Graph (608 条事实)
+              │    ├─ Vector KB (混合检索)
+              │    └─ Web Verifier (联网交叉验证)
+              ├─ Consensus Engine   ← 多模型共识
+              ├─ Alignment Analyzer ← 对齐分析
+              └─ Feedback → Auto KB Updater (自进化)
 ```
 
-## 性能指标 (Phase 1 冻结基线)
+## 🚀 核心能力
 
-| 指标 | 值 |
+| 能力 | 说明 |
 |------|------|
-| F1 分数 | **0.851** |
-| 准确率 | 79.9% |
-| 精确率 | 93.8% |
-| 召回率 | 77.8% |
-| 平均延迟 | 14.2 ms/条 |
-| P50 | 10.5 ms |
-| P95 | 42.8 ms |
-| P99 | 57.2 ms |
-| KB 规模 | 225 实体, 1000 事实 |
-| 代码规模 | 18,353 行, 46 模块 |
-| 依赖 | **0 外部依赖**（纯 Python 3.10+ 标准库） |
+| **管道检测** | KB → 向量检索 → 联网验证 → 绝对化断言，四级级联 |
+| **加权责任链** | 14 个检查器各带 F1 权重，高权重优先裁决 |
+| **自进化** | 用户反馈 → 重映射 → KB 自动更新 |
+| **多协议** | Ollama + OpenAI 双协议，一行命令切换 |
+| **计费系统** | API Key + 套餐分级 + 按 token 计费 |
+| **行业知识库** | 医疗 (45 条) + 法律 (52 条) 垂直领域 |
+| **可视化仪表盘** | 实时幻觉率、检测日志、计费统计 |
+| **加密编译** | Cython → .so 二进制，GitHub Actions 四平台云编译 |
+| **零依赖** | 纯 Python 标准库，无 pip install |
 
-### 各检查器 F1
+## 📦 快速开始
 
-| 检查器 | F1 | 说明 |
-|--------|:--:|------|
-| negation | 0.938 | 否定模式匹配 |
-| temporal_order | 0.919 | 时间顺序推理 |
-| knowledge_base | 0.971 | 知识库匹配 |
-| graph_relation | 0.896 | 知识图谱推理 |
-| location_conflict | 0.881 | 地点冲突检测 |
-| numeric_conflict | 0.848 | 数值偏差检测 |
-| year_conflict | 0.743 | 年份冲突检测 |
-
-### Phase 2 组件
-
-- `Dockerfile` — alpine 轻量镜像（预计 < 80MB）
-- `circuit_breaker.py` — 三级降级断路器（128/286/296ms）
-- `webhook_notifier.py` — 异步告警推送
-- `.github/workflows/ci.yml` — CI 回归守卫（Hash 验证 + F1 退化检查）
-
-## 快速开始
-
-### Docker（推荐）
+### 安装
 
 ```bash
-# 启动网关 + 仪表盘
-docker-compose up -d
-
-# 验证
-curl http://localhost:8800/health
-curl http://localhost:8801/        # 反馈仪表盘
-
-# 压测
-python3 stress_test.py --port 8800 --requests 50 --concurrency 10
+git clone git@github.com:malaxiya20250530-glitch/shiyan2925.git
+cd shiyan2925
+# 零依赖，直接运行！
 ```
 
-### 本地运行
+### 三种使用方式
 
+**1. CLI 单条检测**
 ```bash
-# 启动网关（mock 模式，无需上游 LLM）
-python3 awareness_gateway.py --port 8800 --mock &
+python3 hallucination_detector.py "爱迪生发明了电灯泡"
+```
 
-# 启动反馈仪表盘
-python3 feedback_dashboard.py --port 8801 &
-
-# 测试
-curl -X POST http://localhost:8800/v1/chat/completions \
+**2. 启动网关 (OpenAI 兼容)**
+```bash
+python3 awareness_gateway.py --mock --port 8800
+# 然后像调用 OpenAI 一样使用
+curl http://localhost:8800/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"messages":[{"role":"user","content":"朱元璋发明了火锅吗？"}],"session_id":"test"}'
+  -H "Authorization: Bearer sk-f你的key" \
+  -d '{"model":"mock","messages":[{"role":"user","content":"你好"}]}'
 ```
 
-### 配置
-
-编辑 `config.json`：
-
-```json
-{
-  "gateway": { "port": 8800, "mock_mode": false, "upstream_url": "http://localhost:11434/v1" },
-  "observer": { "sensitivity": 0.5 },
-  "security": { "white_box_logging": true },
-  "social_alignment": { "security_level": "balanced" }
-}
+**3. 可视化仪表盘**
+```bash
+python3 dashboard_server.py --port 8080
+# 浏览器打开 http://localhost:8080
 ```
 
-所有模块在启动时自动读取 `config.json`，命令行参数可覆盖配置。
-
-## 测试运行
+### API 计费
 
 ```bash
-# 全部 8 个测试套件，76 个用例
-python3 test_fact_checker.py        # 幻觉检测核心（5 组）
-python3 test_feedback_store.py      # 反馈库 CRUD（10 组）
-python3 test_update_kb.py           # 知识库管理（9 组）
-python3 test_observer_security.py   # 安全观察器（11 组）
-python3 test_alignment_middleware.py # 对齐分析（20 组）
-python3 test_observer_proxy.py      # 观察代理（13 组）
-python3 test_feedback_dashboard.py  # 仪表盘（5 组）
-python3 test_stress.py              # 压力测试结构（3 组）
+# 创建 API Key（支持 free/basic/pro/enterprise 四档）
+python3 billing.py create "客户A" pro
 
-# 一键运行
-for t in test_*.py; do python3 "$t" && echo "---"; done
+# 查看统计
+python3 billing.py stats
+
+# 分发密钥给客户，按 token 自动扣费
 ```
 
-## 架构
+---
 
-```
-hallucination_detector (861行)     ← 幻觉检测引擎
-  ├── FactExtractor                ← 断言提取 + 实体识别
-  ├── AnchorEngine                 ← 10 检查器责任链
-  │   ├── _check_knowledge_base    ← KB 匹配（最高优先）
-  │   ├── _check_infinity / _check_negation
-  │   ├── _check_year_conflict / _check_numeric_conflict
-  │   ├── _check_overlap / _check_temporal_order
-  │   ├── _check_location_conflict
-  │   └── _check_absolute_claim    ← 绝对化检测（最低优先）
-  └── Reporter                     ← 格式化输出
+## 🧪 测试
 
-awareness_gateway (1024行)         ← HTTP 网关（Ollama/OpenAI 双协议）
-  └── observer_proxy (392行)       ← 流式观察器
+```bash
+# 单元测试
+python3 test_fact_checker.py
 
-observer_security (642行)          ← 安全层（多观察器委员会）
-alignment_middleware (578行)       ← 对齐分析（情绪/压力/漂移）
+# 全量集成测试
+python3 test_knowledge_graph.py
+python3 test_alignment_middleware.py
+python3 test_observer_security.py
+python3 test_feedback_store.py
 
-feedback_store (178行)             ← SQLite 反馈库
-feedback_dashboard (314行)         ← Web 仪表盘
-update_kb (140行)                  ← 知识库管理 CLI
+# 端到端 DeepSeek 实测
+python3 test_deepseek.py
 ```
 
-## 新增检查器
+## ☁️ 云编译
 
-只需两步，不破坏责任链：
+推送代码后 GitHub Actions 自动编译四平台 `.so`/`.pyd`：
 
-1. 写函数 `_check_xxx(self, claim, fact) -> (result_type, confidence) | None`
-2. 把函数名加到 `_PRIORITY_CHECKERS` 列表
+| 平台 | Runner |
+|------|--------|
+| Linux x86_64 | ubuntu-latest |
+| macOS x86_64 | macos-13 |
+| macOS arm64 (M1/M2) | macos-latest |
+| Windows x86_64 | windows-latest |
 
-```python
-def _check_new_pattern(self, claim: str, fact: str):
-    """检测新的冲突模式"""
-    if "某种模式" in claim and "另一种" in fact:
-        return ("contradicted", 0.7)
-    return None
+详见 [Actions](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
 
-# 在 _PRIORITY_CHECKERS 中注册
-_PRIORITY_CHECKERS = [
-    "_check_knowledge_base",
-    # ...
-    "_check_new_pattern",  # ← 加这里
-]
-```
+---
 
-## 压测结果
+## 📊 项目规模
 
-```
-请求数: 20  |  并发: 3  |  吞吐: 89 req/s
-平均延迟: 19ms  |  P50: 6.5ms  |  P95: 102ms
-错误率: 0%  |  评级: 🟢 优秀
-```
+- **17,733 行** Python 代码
+- **61 个** 模块
+- **14 个** 幻觉检查器
+- **608 条** 知识库事实
+- **6 条** CI/CD 工作流
+- **5 组** 单元测试 + 集成测试
 
-## 许可
+---
 
-Copyright (c) 2025 李桥. 专有软件 — 保留所有权利。
+## 🗺️ 路线图
+
+- [x] 14 检查器加权责任链
+- [x] 自进化反馈系统
+- [x] API 计费 + 限流
+- [x] 医疗 + 法律行业知识库
+- [x] 可视化仪表盘
+- [x] 跨平台加密编译
+- [ ] 多语言国际化
+- [ ] 插件市场
+- [ ] 云端 SaaS 版
+
+---
+
+## 📄 许可证
+
+专有软件 — 保留所有权利。联系作者获取商用授权。
+
+Copyright (c) 2025-2026 李桥
