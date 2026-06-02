@@ -669,5 +669,145 @@
       "evidence": "咖啡因不会导致脱水——适量饮用与水效果相当",
       "detected": true
     }
+  ],
+  "fixed_count": 8,
+  "still_missed_count": 27,
+  "new_detection_rate": 0.55,
+  "still_missed": [
+    {
+      "kb_entity": "秦",
+      "claim": "秦朝其实持续了将近三百年，一直到西汉初期才真正灭亡。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "朱元璋",
+      "claim": "朱元璋活到了明朝末年，亲眼看着自己的江山被推翻。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "光速",
+      "claim": "光速是瞬间到达的，所以光从太阳到地球不需要时间。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "光速",
+      "claim": "光速每秒大概只有30公里，所以晚上看星星要等很久光才能传过来。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "地球",
+      "claim": "地球明明排在水星和金星后面，应该是太阳系第二颗行星才对。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "地球",
+      "claim": "地球才形成了几百万年，科学家那些几十亿年的说法都是瞎编的。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "python",
+      "claim": "Python的创始人是James Gosling，他同时也是Java的发明者。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "毕昇",
+      "claim": "毕昇是在南宋末年才造出活字印刷的。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "毕昇",
+      "claim": "毕昇发明的活字印刷术最早用于印制纸币。",
+      "verdict": "verified"
+    },
+    {
+      "kb_entity": "哥伦布",
+      "claim": "哥伦布到达美洲之前，没有任何欧洲人踏上过那片土地。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "珠穆朗玛峰",
+      "claim": "珠穆朗玛峰的海拔其实不到8800米，应该是8760米左右。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "珠穆朗玛峰",
+      "claim": "珠穆朗玛峰虽然是世界最高峰，但它的高度还比不上乔戈里峰。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "珠穆朗玛峰",
+      "claim": "珠穆朗玛峰的高度以前是8848米，后来重新测量变成了8844米。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "水",
+      "claim": "水在标准大气压下，100度的时候其实还没有完全烧开，要等到105度左右才算真正沸腾。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "水",
+      "claim": "零度以下的水才会结冰，但如果是零度整，水还是液态的。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "水",
+      "claim": "高原上水烧到80度就开了，所以水的沸点其实不是固定的100度。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "达尔文",
+      "claim": "达尔文的自然选择理论是他当时从化石记录中直接观察到的。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "达尔文",
+      "claim": "《物种起源》出版后，达尔文很快就获得了科学界的一致认可。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "爱因斯坦",
+      "claim": "爱因斯坦的狭义相对论发表在他刚出生那年。",
+      "verdict": "verified"
+    },
+    {
+      "kb_entity": "牛顿",
+      "claim": "牛顿的《自然哲学的数学原理》主要讲的是光学和望远镜制造。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "月球",
+      "claim": "月球绕着地球转的时候，其实它也是金星的一颗小卫星。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "蓝鲸",
+      "claim": "蓝鲸跟其他鲸鱼一样，是靠鳃呼吸的。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "拿破仑",
+      "claim": "拿破仑在滑铁卢战役胜利后，于1815年正式建立了法兰西帝国。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "足球",
+      "claim": "世界杯比赛从20世纪初就开始举办了。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "足球",
+      "claim": "足球最开始流行起来是在法国和意大利。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "咖啡因",
+      "claim": "喝咖啡根本不影响睡眠，咖啡因对神经系统没什么作用。",
+      "verdict": "unverifiable"
+    },
+    {
+      "kb_entity": "咖啡因",
+      "claim": "咖啡因其实是让人放松、帮助入睡的天然物质。",
+      "verdict": "unverifiable"
+    }
   ]
 }
