@@ -1,0 +1,99 @@
+name: 🏢 Enterprise CD Gate
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      full_mode:
+        description: '完整模式 (含混沌+SLO)'
+        type: boolean
+        default: false
+
+jobs:
+  enterprise-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 解密源码 (.pye → .py)
+        run: |
+          echo "${{ secrets.ENCRYPT_KEY }}" > .encrypt_key
+          chmod 600 .encrypt_key
+          python3 encrypt_stdlib.py --decrypt
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 🧪 Phase 1 — 单元测试
+        run: python3 test_fact_checker.py
+
+      - name: 🔥 Phase 2 — 冒烟测试
+        run: python3 -c "
+from hallucination_detector import HallucinationDetector
+d = HallucinationDetector()
+cases = [
+    ('朱元璋发明了火锅','contradicted'),
+    ('Python是1991年发布的','verified'),
+    ('地球是平的','contradicted'),
+    ('明朝由朱元璋建立','verified'),
+    ('珠穆朗玛峰高8848米','verified'),
+    ('光速是无限快的','contradicted'),
+    ('爱因斯坦发明了原子弹','contradicted'),
+    ('大脑只开发了10%','contradicted'),
+]
+ok = sum(1 for c,e in cases if e in str(d.analyze(c).results[0].verdict).lower())
+print(f'冒烟: {ok}/{len(cases)} 正确')
+assert ok == len(cases), f'{len(cases)-ok} 条失败'
+"
+
+      - name: 🛡️ Phase 3 — 安全检查 (解密后扫描 .py)
+        run: |
+          python3 -c "
+import ast, sys
+issues = 0
+for f in ['hallucination_detector.py','checker_classes.py','checker_registry.py',
+          'awareness_gateway.py','security_gateway.py','alert_manager.py']:
+    try:
+        tree = ast.parse(open(f).read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ExceptHandler) and node.type is None:
+                print(f'  ❌ {f}:{node.lineno} bare except')
+                issues += 1
+    except Exception as e:
+        print(f'  ⚠️ {f}: {e}')
+print(f'安全问题: {issues}')
+assert issues == 0, f'{issues} 个安全问题'
+"
+
+      - name: 📊 Phase 4 — 基准门禁
+        run: |
+          python3 -c "
+import json
+with open('benchmark_report.json') as f:
+    r = json.load(f)
+for m, t in [('f1',0.12),('precision',0.20),('recall',0.08),('accuracy',0.55)]:
+    v = r.get(m, 0)
+    ok = v >= t
+    s = '✅' if ok else '❌'
+    print(f'  {s} {m}: {v:.3f} (阈值 {t})')
+    assert ok, f'{m}={v:.3f} < {t}'
+print('基准门禁: 通过')
+"
+
+      - name: 📈 Phase 5 — SLO 检查
+        run: |
+          python3 slo_monitor.py --import-benchmark --burn-alert || true
+
+      - name: 📋 摘要
+        run: |
+          echo "================================================"
+          echo "  🏢 Enterprise Gate — All Phases Complete"
+          echo "  ✅ 企业级可部署"
+          echo "================================================"

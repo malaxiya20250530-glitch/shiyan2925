@@ -5,10 +5,10 @@ on:
     branches: [master]
     paths:
       - 'build_binaries.py'
-      - 'hallucination_detector.py'
-      - 'checker_classes.py'
-      - 'checker_registry.py'
-      - 'knowledge_graph.py'
+      - 'hallucination_detector.pye'
+      - 'checker_classes.pye'
+      - 'checker_registry.pye'
+      - 'knowledge_graph.pye'
   workflow_dispatch:
   release:
     types: [published]
@@ -18,6 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: 解密源码 (.pye → .py)
+        run: |
+          echo "${{ secrets.ENCRYPT_KEY }}" > .encrypt_key
+          chmod 600 .encrypt_key
+          python3 encrypt_stdlib.py --decrypt
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
