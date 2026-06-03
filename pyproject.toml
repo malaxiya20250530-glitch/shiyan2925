@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hallucination-detector"
+name = "llm-fact-guard"
 version = "3.0.0"
 description = "Zero-dependency LLM hallucination detection middleware with billing & dashboard — real-time fact-checking proxy for LLMs"
 readme = "README.md"
@@ -26,7 +26,7 @@ ocr = ["pytesseract"]
 langchain = ["langchain-core"]
 
 [project.scripts]
-awareness-gateway = "awareness_gateway:main"
+anchor-gateway = "awareness_gateway:main"
 awareness-dashboard = "feedback_dashboard:main"
 awareness-detect = "ocr_handler:main"
 awareness-kb = "update_kb:main"

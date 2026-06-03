@@ -1,7 +1,7 @@
 # 生产镜像 — 零外部依赖，镜像 < 100MB
 FROM python:3.13-alpine
 
-LABEL org.opencontainers.image.title="Hallucination Detector Gateway"
+LABEL org.opencontainers.image.title="Anchor Gateway"
 LABEL org.opencontainers.image.description="Zero-dependency LLM hallucination detection middleware with billing & dashboard"
 LABEL org.opencontainers.image.version="3.0.0"
 LABEL com.awareness.security.review="2026-06-02"
@@ -56,6 +56,6 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 # 安全加固: 只读文件系统 + 能力限制 (需要运行时 --read-only --cap-drop=ALL)
 # 运行: docker run --read-only --cap-drop=ALL --tmpfs /tmp \
-#        -v feedback.db:/app/feedback.db:rw awareness-gateway
+#        -v feedback.db:/app/feedback.db:rw anchor-gateway
 ENTRYPOINT ["python3", "awareness_gateway.py"]
 CMD ["--mock", "--port", "8800"]

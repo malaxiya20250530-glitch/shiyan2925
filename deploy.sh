@@ -1,6 +1,6 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════╗
-# ║  觉察推理网关 — VPS 一键部署             ║
+# ║  Anchor 事实锚定网关 — VPS 一键部署             ║
 # ║  支持: Docker / 裸机 / systemd          ║
 # ╚══════════════════════════════════════════╝
 set -e
@@ -14,7 +14,7 @@ PORT="${PORT:-8800}"
 banner() {
     echo ""
     echo -e "${CYAN}╔══════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}║  觉察推理网关 v2.3 — VPS 部署        ║${RESET}"
+    echo -e "${CYAN}║  Anchor 事实锚定网关 v2.3 — VPS 部署        ║${RESET}"
     echo -e "${CYAN}╚══════════════════════════════════════╝${RESET}"
     echo ""
 }
@@ -89,13 +89,13 @@ deploy_systemd() {
     echo -e "${BOLD}模式: systemd 服务${RESET}"
     echo ""
 
-    local SERVICE_FILE="/etc/systemd/system/awareness-gateway.service"
+    local SERVICE_FILE="/etc/systemd/system/anchor-gateway.service"
     local WORKDIR="$(pwd)"
-    local TMPFILE="$(mktemp /tmp/awareness-gateway.XXXXXX)"  # TM-023: 安全临时文件
+    local TMPFILE="$(mktemp /tmp/anchor-gateway.XXXXXX)"  # TM-023: 安全临时文件
 
     cat > "$TMPFILE" << EOF
 [Unit]
-Description=觉察推理网关
+Description=Anchor 事实锚定网关
 After=network.target
 
 [Service]
@@ -114,12 +114,12 @@ EOF
     if [ "$(id -u)" -eq 0 ]; then
         cp "$TMPFILE" "$SERVICE_FILE" && rm -f "$TMPFILE"
         systemctl daemon-reload
-        systemctl enable awareness-gateway
-        systemctl start awareness-gateway
+        systemctl enable anchor-gateway
+        systemctl start anchor-gateway
         sleep 2
         if curl -sf "http://localhost:$PORT/health" > /dev/null 2>&1; then
             echo -e "${GREEN}✅ systemd 服务已启动${RESET}"
-            echo "  systemctl status awareness-gateway"
+            echo "  systemctl status anchor-gateway"
         fi
     else
         echo "需要 root 权限安装 systemd 服务"

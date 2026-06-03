@@ -1,11 +1,11 @@
-# Awareness Gateway · 觉察推理网关
+# Anchor Gateway · Anchor 事实锚定网关
 
 [![Tests](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/test.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
 
 A transparent proxy between users and LLMs that detects hallucinations, alignment drift, and safety risks in real time.
 
 ```
-User → [Awareness Gateway] → LLM API
+User → [Anchor Gateway] → LLM API
          ├── Fact-checking (10-checker chain of responsibility)
          ├── Alignment detection (emotion / pressure / pleasing drift)
          └── Safety observation (anchoring / source attribution / consistency)
@@ -16,16 +16,16 @@ User → [Awareness Gateway] → LLM API
 ### Install
 
 ```bash
-pip install awareness-gateway
+pip install anchor-gateway
 # or for OCR support:
-pip install awareness-gateway[ocr]
+pip install anchor-gateway[ocr]
 ```
 
 ### Run
 
 ```bash
 # Mock mode (no upstream LLM needed)
-awareness-gateway --mock --port 8800
+anchor-gateway --mock --port 8800
 
 # Dashboard
 awareness-dashboard --port 8900

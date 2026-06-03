@@ -1,4 +1,8 @@
-# 🔍 Hallucination Detector · 幻觉检测器
+# 🔍 Anchor · 幻觉检测器
+
+[![PyPI](https://img.shields.io/pypi/v/llm-fact-guard)](https://pypi.org/project/llm-fact-guard/)
+[![Downloads](https://img.shields.io/pypi/dm/llm-fact-guard)](https://pypi.org/project/llm-fact-guard/)
+
 
 [![CI](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/test.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
 [![Build](https://github.com/malaxiya20250530-glitch/shiyan2925/actions/workflows/build-binaries.yml/badge.svg)](https://github.com/malaxiya20250530-glitch/shiyan2925/actions)
