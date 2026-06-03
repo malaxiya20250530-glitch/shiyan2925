@@ -39,10 +39,11 @@
     "_shared_entity bidirectional matching",
     "_compare_with_fact self-verification"
   ],
-  "hallucination_detector.py_sha256": "d655f97e461e",
-  "checker_classes.py_sha256": "41cf77f6df7f",
+  "hallucination_detector.py_sha256": "7ebe66c5cf1d",
+  "checker_classes.py_sha256": "43930f75e718",
   "checker_registry.py_sha256": "d113a6f43ab4",
-  "kb_core.json_sha256": "41701e1acbe1",
+  "kb_core.json_sha256": "c1e4b087c07e",
   "updated_at": "2026-06-03T23:00Z",
-  "update_reason": "安全加固:同步CI解密后哈希(git HEAD版本)"
+  "update_reason": "安全加固:同步CI解密后哈希(git HEAD版本)",
+  "updated": "2026-06-03"
 }
