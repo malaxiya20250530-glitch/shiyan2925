@@ -8,6 +8,52 @@
 
 你正在维护 hallucination_detector.py —— 一个幻觉检测模块，核心是 _compare_with_fact() 函数和优先级检查器链。项目位于 Android Termux 环境，所有代码在 /data/data/com.termux/files/home/。
 
+
+# 🔩 铁律 — 架构锚定（最高优先级，不可违反）
+
+## 铁律 1：所有代码必须服务于大模型幻觉检测
+
+本项目的唯一使命是**检测和纠正大语言模型的幻觉输出**。
+任何新增模块、实验、重构——必须能回答以下问题：
+> 这个改动如何让 hallucination_detector.py 检测幻觉更准/更快/更鲁棒？
+
+答不出来的，不做。
+
+## 铁律 2：必须接入真实数据管道
+
+- **知识库**：`knowledge/fact_store.db`（704万条事实，1.6GB）+ `kb_core.json`（语义索引）
+- **检测器**：`hallucination_detector.py` 的 AnchorEngine → _compare_with_fact() → Checker 责任链
+- **测试**：`test_fact_checker.py`（5组测试必须全绿）
+
+新模块如果只用 8-12 个手工节点做 toy 实验而不读 `fact_store.db`、不调 `_compare_with_fact()`、
+不跑 `test_fact_checker.py`——那就是偏离，必须叫停。
+
+## 铁律 3：禁止悬浮的"认知架构"沙盒
+
+从 v5 到 v5.9 的教训：
+- `truth_router/` 69 个文件、5470 行代码
+- 零引用 `hallucination_detector`，零引用 `fact_store.db`
+- 成了独立的学术玩具，对幻觉检测无贡献
+
+此后的真理：
+- 沙盒实验必须在 `truth_router/` 内完成概念验证
+- 验证通过后**必须集成回** `hallucination_detector.py` 或 `checker_classes.py`
+- 不得在 `truth_router/` 中无限堆叠新版本而不落地
+
+## 铁律 4：改动后必须通过质量门禁
+
+- `python3 test_fact_checker.py` — 5 组全绿
+- `python3 -c "import hallucination_detector"` — 无语法错误
+- 新增公开函数必须有 docstring
+- 不得破坏 Checker.registry 注册顺序（除非明确知道优先级变更）
+
+## 铁律 5：纯 Python 标准库
+
+禁用 torch、numpy、transformers 等外部依赖。
+需要在 `meta/nn.py` 中手写微型神经网络——已经做到了，继续保持。
+
+---
+
 # 核心约束（必须遵守）
 
 ## 架构底线
