@@ -1,4 +1,4 @@
-name: 🏢 Enterprise CD Gate
+name: Enterprise CD Gate
 
 on:
   push:
