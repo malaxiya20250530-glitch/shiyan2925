@@ -3,10 +3,6 @@ name: 🔥 灵绘 APK 云编译
 on:
   push:
     branches: [master]
-    paths:
-      - 'ai-desktop-pet/unity_project/**'
-      - 'ai-desktop-pet/unity/**'
-      - '.github/workflows/unity-cloud-build.yml'
   workflow_dispatch:
 
 jobs:
@@ -16,32 +12,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 🗑️ 清理
-        run: find ai-desktop-pet -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-
       - name: 📦 缓存 Library
         uses: actions/cache@v4
         with:
           path: ai-desktop-pet/unity_project/Library
-          key: Library-Android-v2-${{ hashFiles('ai-desktop-pet/unity_project/Assets/**') }}
-          restore-keys: Library-Android-v2-
+          key: Library-Android-v3-${{ hashFiles('ai-desktop-pet/unity_project/Assets/**') }}
+          restore-keys: Library-Android-v3-
 
-      - name: 🔑 激活个人许可证
-        uses: game-ci/unity-activate@v1
-        with:
-          unityVersion: 2022.3.20f1
-          unityUsername: ${{ secrets.UNITY_EMAIL }}
-          unityPassword: ${{ secrets.UNITY_PASSWORD }}
-          unitySerial: ''
-          unityPersonal: 'true'
-
-      - name: 🎮 编译 APK
+      - name: 🎮 Unity 编译 APK
         uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           projectPath: ai-desktop-pet/unity_project
           targetPlatform: Android
           buildName: LingHui-Nezha
           buildsPath: build
+          unityVersion: 2022.3.20f1
           versioning: Semantic
           androidAppBundle: false
 
@@ -56,5 +44,4 @@ jobs:
         run: |
           APK=$(find build/Android -name "*.apk" 2>/dev/null | head -1)
           echo "### 🔥 灵绘 APK" >> $GITHUB_STEP_SUMMARY
-          echo "**文件**: $APK" >> $GITHUB_STEP_SUMMARY
-          echo "**大小**: $(du -h "$APK" 2>/dev/null | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "**文件**: $APK ($(du -h "$APK" 2>/dev/null | cut -f1))" >> $GITHUB_STEP_SUMMARY
