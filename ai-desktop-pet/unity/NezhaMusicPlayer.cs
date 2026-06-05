@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 
 /// <summary>
-/// 灵辉音乐播放器 — 内置歌单 + 网络下载 + BPM同步舞蹈
+/// 灵绘音乐播放器 — 内置歌单 + 网络下载 + BPM同步舞蹈
 /// </summary>
 public class NezhaMusicPlayer : MonoBehaviour
 {
@@ -99,7 +99,7 @@ public class NezhaMusicPlayer : MonoBehaviour
     {
         yield return new WaitForSeconds(0.5f);
         if (voiceGreeting != null)
-            voiceGreeting.Speak("你好，我是灵辉，可以唱歌跳舞的！", () =>
+            voiceGreeting.Speak("你好，我是灵绘，可以唱歌跳舞的！", () =>
             {
                 // 问候完自动播第一首
                 if (builtInSongs.Count > 0)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-灵辉语音生成器 — 生成 WAV 问候语 + 歌单下载
+灵绘语音生成器 — 生成 WAV 问候语 + 歌单下载
 纯 Python 标准库，零依赖
 """
 
@@ -154,7 +154,7 @@ def download_song(song: dict, output_dir: str) -> bool:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="灵辉语音 + 歌单下载")
+    parser = argparse.ArgumentParser(description="灵绘语音 + 歌单下载")
     parser.add_argument("--greeting", "-g", action="store_true", help="生成问候语音")
     parser.add_argument("--download", "-d", action="store_true", help="下载免费歌单")
     parser.add_argument("--all", "-a", action="store_true", help="全部执行")
@@ -165,12 +165,12 @@ if __name__ == "__main__":
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     MUSIC_DIR.mkdir(parents=True, exist_ok=True)
 
-    print("🎤 灵辉语音系统")
+    print("🎤 灵绘语音系统")
     print()
 
     if args.greeting or args.all:
         phrases = [
-            "你好，我是灵辉，可以唱歌跳舞的！",
+            "你好，我是灵绘，可以唱歌跳舞的！",
             "想听什么歌？",
             "正在下载歌曲，请稍等",
             "看我的舞姿！",

@@ -6,7 +6,7 @@ using System.IO;
 using System.Text;
 
 /// <summary>
-/// 灵辉语音系统 — TTS 合成 + 内置短语 + 在线语音
+/// 灵绘语音系统 — TTS 合成 + 内置短语 + 在线语音
 /// 支持：内置 PCM 短语 / Unity TTS / 在线 TTS API
 /// </summary>
 public class NezhaVoiceGreeting : MonoBehaviour
@@ -24,7 +24,7 @@ public class NezhaVoiceGreeting : MonoBehaviour
 
     [Header("默认问候语")]
     [TextArea(2, 4)]
-    public string greetingText = "你好，我是灵辉，可以唱歌跳舞的！";
+    public string greetingText = "你好，我是灵绘，可以唱歌跳舞的！";
     public string idleText = "想听什么歌？";
     public string downloadText = "正在下载歌曲，请稍等";
     public string errorText = "哎呀，出错了";
@@ -66,7 +66,7 @@ public class NezhaVoiceGreeting : MonoBehaviour
             new VoicePhrase { key = "error", text = errorText },
             new VoicePhrase { key = "play", text = "好的，马上播放" },
             new VoicePhrase { key = "next", text = "下一首" },
-            new VoicePhrase { key = "hello", text = "你好呀，我是灵辉" },
+            new VoicePhrase { key = "hello", text = "你好呀，我是灵绘" },
             new VoicePhrase { key = "dance", text = "看我的舞姿！" },
             new VoicePhrase { key = "fired_up", text = "燃烧吧！" },
         };

@@ -6,7 +6,7 @@ using System.IO;
 using System.Text;
 
 /// <summary>
-/// 灵辉歌曲下载器 — 从免费音源下载歌曲
+/// 灵绘歌曲下载器 — 从免费音源下载歌曲
 /// 支持：本地缓存 / 直链下载 / 免费 API 搜索
 /// </summary>
 public class NezhaSongDownloader : MonoBehaviour

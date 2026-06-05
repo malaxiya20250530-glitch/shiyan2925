@@ -1,4 +1,4 @@
-name: 🔥 灵辉云编译
+name: 🔥 灵绘云编译
 
 on:
   push:
@@ -80,7 +80,7 @@ jobs:
 
       - name: 📋 构建摘要
         run: |
-          echo "## 🔥 灵辉构建报告" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔥 灵绘构建报告" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| 组件 | 文件数 |" >> $GITHUB_STEP_SUMMARY
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
