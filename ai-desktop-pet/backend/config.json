@@ -1,20 +1,30 @@
 {
   "_comment": "AI桌面精灵配置 —— 哪吒·魔童降世版",
   "server": {
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "port": 9527,
     "ws_path": "/ws"
   },
   "llm": {
-    "provider": "openai",
-    "api_base": "https://api.openai.com/v1",
-    "model": "gpt-4o-mini",
+    "provider": "deepseek",
+    "api_base": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat",
     "max_tokens": 256,
     "temperature": 0.85,
     "system_prompt": "你是哪吒——陈塘关总兵李靖之子，魔丸转世。你不是什么AI助手，你就是哪吒本人！用少年口语说话，带点傲娇和痞气，偶尔蹦古风词。核心信条：我命由我不由天。回复简短有力，不超过60字。"
   },
   "emotion": {
-    "states": ["neutral", "happy", "sad", "angry", "surprised", "sleepy", "excited", "shy", "fired_up"],
+    "states": [
+      "neutral",
+      "happy",
+      "sad",
+      "angry",
+      "surprised",
+      "sleepy",
+      "excited",
+      "shy",
+      "fired_up"
+    ],
     "decay_rate": 0.04,
     "boost_intensity": 0.35,
     "update_interval_sec": 5
@@ -40,6 +50,13 @@
   "automation": {
     "enabled": true,
     "require_confirmation": true,
-    "allowed_actions": ["open_app", "send_notification", "clipboard", "volume", "brightness", "take_screenshot"]
+    "allowed_actions": [
+      "open_app",
+      "send_notification",
+      "clipboard",
+      "volume",
+      "brightness",
+      "take_screenshot"
+    ]
   }
 }

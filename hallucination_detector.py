@@ -1274,9 +1274,17 @@ class AnchorEngine:
 
         # 高相似度快速通道: 字符重叠率 > 85% → 判 verified
         # 处理同一事实的不同表述（如"最新高度8848.86米" vs "2020年测量8848.86米"）
+        # 数字一致性守卫: 双方都有数字但数字集合不同时，跳过快速通道
+        # 防止字符高度重叠但数字冲突被误判为 verified（如 1989 vs 1991）
+        _digit_conflict = False
+        _claim_digits = set(re.findall(r'\d+', claim_norm))
+        _fact_digits = set(re.findall(r'\d+', fact_norm))
+        if _claim_digits and _fact_digits and _claim_digits != _fact_digits:
+            _digit_conflict = True
+
         claim_set = set(claim_norm)
         fact_set = set(fact_norm)
-        if claim_set and fact_set:
+        if claim_set and fact_set and not _digit_conflict:
             overlap = len(claim_set & fact_set) / max(len(claim_set), len(fact_set))
             if overlap > 0.85:
                 return ("verified", 0.92)

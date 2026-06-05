@@ -21,9 +21,9 @@ class LLMEngine:
         self.api_key: str = self._load_api_key()
 
     def _load_api_key(self) -> str:
-        """从环境变量加载 API 密钥"""
+        """从环境变量加载 API 密钥，优先 DEEPSEEK_API_KEY，回退 OPENAI_API_KEY"""
         import os
-        return os.environ.get("OPENAI_API_KEY", "")
+        return os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
 
     def chat(self, user_message: str, history: Optional[list[dict]] = None,
              emotion: str = "neutral", personality_hint: str = "") -> str:

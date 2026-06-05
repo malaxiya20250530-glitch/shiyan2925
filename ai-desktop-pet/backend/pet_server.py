@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 from typing import Optional
 
 # 切到 backend 目录以正确加载 config.json
@@ -153,7 +154,18 @@ class SimpleWSServer:
         print(f"🐾 AI桌面精灵 WebSocket 服务已启动: ws://{addr[0]}:{addr[1]}")
         print(f"   情绪引擎: 就绪 | LLM: {self.pet.llm.model} | 自动化: {'启用' if self.pet.automation.enabled else '未启用'}")
         print(f"   性格: {self.pet.personality.profile['label']}")
-        print("   等待 Unity 前端连接...\n")
+
+        # 同时启动 HTTP 静态文件服务（托管前端页面）
+        web_root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'docs', 'linghui')
+        if os.path.isdir(web_root):
+            os.chdir(web_root)
+            from http.server import HTTPServer, SimpleHTTPRequestHandler
+            SimpleHTTPRequestHandler.extensions_map[".glb"] = "model/gltf-binary"
+            SimpleHTTPRequestHandler.extensions_map[".gltf"] = "model/gltf+json"
+            httpd = HTTPServer(('0.0.0.0', 8080), SimpleHTTPRequestHandler)
+            print(f"   🌐 前端页面: http://0.0.0.0:8080")
+            http_server_task = asyncio.get_event_loop().run_in_executor(None, httpd.serve_forever)
+        print("   等待连接...\n")
 
         async with server:
             await server.serve_forever()
@@ -236,7 +248,7 @@ class SimpleWSServer:
                 if frame_info is None:
                     break
 
-                fin, opcode, payload = frame_info
+                fin, opcode, payload = frame_info[:3]
                 buffer = buffer[frame_info[3]:]  # frame_info[3] 是帧总长度
 
                 if opcode == 0x8:  # 关闭帧
