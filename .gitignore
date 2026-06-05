@@ -1,79 +1,26 @@
-# 构建产物
-dist/
-*.egg-info/
+# Python
 __pycache__/
 *.pyc
 *.pyo
+*.pye
 
-# 运行时
-*.log
-*.db-journal
-dashboard.log
-
-# 大型二进制
-*.tar.gz
-*.so
-*.pyd
-
-# 加密密钥（不可提交）
-_encrypt_key
-_encrypt_key.bak
+# Unity
+ai-desktop-pet/unity_project/Library/
+ai-desktop-pet/unity_project/Temp/
+ai-desktop-pet/unity_project/Obj/
+ai-desktop-pet/unity_project/Build/
+ai-desktop-pet/unity_project/Logs/
+ai-desktop-pet/unity_project/UserSettings/
 
 # IDE
 .vscode/
 .idea/
 
-# 系统
+# OS
 .DS_Store
 Thumbs.db
-.cargo/
-.codex/
 
-# git-crypt 加密排除（这些不需要加密）
-.cache/
-.local/
-.mimo2codex/
-bench_out_*.json
-chaos_out*.json
-*_out.txt
-*_out.json
-scan_out.json
-security_scan.json
-validate_report.json
-mem_test.py
-git-crypt-key
-.encrypt_key
-
-# 加密模块源码（推送 .pye 加密版本）
-hallucination_detector.py
-checker_classes.py
-checker_registry.py
-prompt_injection_defense.py
-meta_weight_learner.py
-consensus_voter.py
-knowledge_graph.py
-truth_graph.py
-trust_engine.py
-awareness_gateway.py
-entity_index.py
-query_orchestrator.py
-embedding_search.py
-fuzzy_matcher.py
-injection_hardener.py
-security_gateway.py
-security_hardener.py
-content_filter.py
-db_protection.py
-alignment_middleware.py
-true_self_os.py
-social_self_sim.py
-observability.py
-observability_platform.py
-circuit_breaker.py
-rate_limiter.py
-backpressure.py
-chaos_engineering.py
-regression_watchdog.py
-production_guard.py
-production_stability.py
-production_validator.py
+# 临时
+*.tmp
+*.log
+.bash_history

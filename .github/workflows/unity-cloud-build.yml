@@ -1,0 +1,79 @@
+name: 🔥 灵辉 Unity 云编译
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'ai-desktop-pet/unity_project/**'
+      - 'ai-desktop-pet/unity/**'
+      - '.github/workflows/unity-cloud-build.yml'
+  workflow_dispatch:
+    inputs:
+      target_platform:
+        description: '目标平台'
+        required: true
+        default: 'Android'
+        type: choice
+        options: ['Android', 'StandaloneWindows64', 'WebGL']
+
+jobs:
+  build:
+    name: 编译 ${{ github.event.inputs.target_platform || 'Android' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        targetPlatform:
+          - ${{ github.event.inputs.target_platform || 'Android' }}
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🗑️ 清理非项目文件
+        run: |
+          find ai-desktop-pet -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+          find ai-desktop-pet -name "*.pyc" -delete 2>/dev/null || true
+
+      - name: 📦 缓存 Unity Library
+        uses: actions/cache@v4
+        with:
+          path: ai-desktop-pet/unity_project/Library
+          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('ai-desktop-pet/unity_project/Assets/**', 'ai-desktop-pet/unity_project/Packages/**', 'ai-desktop-pet/unity_project/ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ matrix.targetPlatform }}-
+
+      - name: 🎮 Unity 编译
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: ai-desktop-pet/unity_project
+          targetPlatform: ${{ matrix.targetPlatform }}
+          buildName: LingHui-Nezha
+          buildsPath: build
+          versioning: Semantic
+          androidAppBundle: false
+          androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_NAME }}
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+
+      - name: 📤 上传 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LingHui-Nezha-${{ matrix.targetPlatform }}
+          path: build/${{ matrix.targetPlatform }}
+          retention-days: 30
+
+      - name: 📋 构建摘要
+        run: |
+          echo "### 🔥 灵辉构建完成" >> $GITHUB_STEP_SUMMARY
+          echo "**平台**: ${{ matrix.targetPlatform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**分支**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**提交**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📦 APK 可从 Actions Artifacts 下载" >> $GITHUB_STEP_SUMMARY
