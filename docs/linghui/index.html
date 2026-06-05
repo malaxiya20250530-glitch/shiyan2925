@@ -174,7 +174,7 @@ bgG.setAttribute('position',new THREE.BufferAttribute(bgP,3));
 scene.add(new THREE.Points(bgG,new THREE.PointsMaterial({color:0xff6622,size:0.015,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0.5})));
 
 // === 触摸控制 ===
-var autoRotate=true,rotY=Math.PI,rotX=-0.1,dist=2.6;
+var autoRotate=true,rotY=0,rotX=-0.1,dist=2.6;
 var lastX=0,lastY=0,lastD=0,touching=false;
 R.domElement.addEventListener('touchstart',function(e){
   if(e.touches.length==1){lastX=e.touches[0].clientX;lastY=e.touches[0].clientY;touching=true;autoRotate=false}
