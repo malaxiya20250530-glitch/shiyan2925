@@ -1,37 +1,64 @@
-<!DOCTYPE html><html><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>test</title>
-<style>body{background:#000;margin:0;overflow:hidden}</style></head>
+<!DOCTYPE html><html lang=zh><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>GLB加载测试</title>
+<style>*{margin:0;padding:0}body{background:#000;color:#ff4400;font:14px monospace;padding:20px}#log{white-space:pre-wrap}#v{width:100%;height:300px;background:#111;margin:10px 0}</style></head>
 <body>
-<div id=L style="position:fixed;top:30px;left:30px;color:#0f0;font-size:16px;z-index:99;pointer-events:none">加载中...</div>
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script>
-(function w(){
-  if(typeof THREE==='undefined'){setTimeout(w,300);return;}
-  var L=document.getElementById('L');
-  L.innerHTML='ThreeJS ✅';
-  try{
-    var s=new THREE.Scene();s.background=new THREE.Color(0x000022);
-    var c=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,20);
-    c.position.set(0,0,3);c.lookAt(0,0,0);
-    var r=new THREE.WebGLRenderer({antialias:true});
-    r.setPixelRatio(1);r.setSize(innerWidth,innerHeight);
-    document.body.appendChild(r.domElement);
-    // 强光照
-    s.add(new THREE.AmbientLight(0xffffff,3));
-    s.add(new THREE.DirectionalLight(0xffffff,8)).position.set(0,0,5);
-    s.add(new THREE.DirectionalLight(0xffffff,5)).position.set(2,1,1);
-    var m=new THREE.Mesh(
-      new THREE.SphereGeometry(0.5,32,32),
-      new THREE.MeshStandardMaterial({color:0xffaa00,roughness:0.2,metalness:0.6,emissive:0x331100})
-    );
-    s.add(m);
-    L.innerHTML='渲染中...';
-    var fc=0;
-    (function loop(t){
-      requestAnimationFrame(loop);
-      fc++;m.rotation.y+=0.02;m.rotation.x+=0.01;m.position.y=Math.sin(t*0.003)*0.5;
-      r.render(s,c);
-      if(fc%60==0)L.innerHTML='帧:'+fc+' 球@y='+m.position.y.toFixed(2);
-    })();
-  }catch(e){L.innerHTML='❌'+e.message}
-})();
+<h2>🧪 nezha.glb 加载测试</h2>
+<div id=v></div><div id=log></div>
+
+<script type=importmap>
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+
+<script type=module>
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const log=document.getElementById('log');
+
+function L(s,ok){log.innerHTML+=(ok?'✅ ':'❌ ')+s+'<br>'}
+
+try{
+  L('开始加载 nezha.glb...');
+
+  const gltf=await new Promise((ok,err)=>{
+    new GLTFLoader().load('nezha.glb',ok,function(p){
+      if(p.total)L('进度: '+Math.round(p.loaded/p.total*100)+'%');
+    },err);
+  });
+
+  L('GLB 加载成功',true);
+  L('场景子节点: '+gltf.scene.children.length);
+  L('动画数: '+(gltf.animations||[]).length);
+
+  let meshCount=0,vertCount=0;
+  gltf.scene.traverse(function(ch){
+    if(ch.isMesh){meshCount++;vertCount+=ch.geometry.attributes.position.count}
+  });
+  L('Mesh数: '+meshCount);
+  L('顶点总数: '+vertCount);
+  L('有顶点色: '+(gltf.scene.children[0]?.children[0]?.geometry?.attributes?.color?'是':'否'));
+
+  // 快速渲染测试
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0x1a1030);
+  const cam=new THREE.PerspectiveCamera(45,2,0.1,10);cam.position.set(0,0.4,1.8);cam.lookAt(0,0.35,0);
+  const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power'});
+  R.setPixelRatio(Math.min(devicePixelRatio,1.5));R.setSize(360,300);
+  document.getElementById('v').appendChild(R.domElement);
+  scene.add(new THREE.AmbientLight(0xffffff,0.5));
+  scene.add(new THREE.DirectionalLight(0xffeedd,1)).position.set(2,2,3);
+
+  gltf.scene.traverse(function(ch){if(ch.isMesh)ch.material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.55})});
+  gltf.scene.scale.setScalar(2.8);gltf.scene.position.set(0,-0.25,0);gltf.scene.rotation.y=Math.PI;
+  scene.add(gltf.scene);
+  R.render(scene,cam);
+  L('渲染测试通过',true);
+
+  // 动画循环验证
+  let frames=0;
+  function loop(){frames++;if(frames<30)requestAnimationFrame(loop);else L('动画循环 OK ('+frames+' 帧)',true)}
+  loop();
+
+}catch(e){
+  L('异常: '+e.message);
+  console.error(e);
+}
 </script></body></html>

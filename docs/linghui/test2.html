@@ -1,62 +1,65 @@
-<!DOCTYPE html><html><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>test2</title>
-<style>body{background:#000;margin:0;overflow:hidden}#L{position:fixed;top:30px;left:30px;color:#0f0;font-size:14px;z-index:99;pointer-events:none}</style></head>
-<body><div id=L>加载中...</div>
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script>
-(function w(){
-  if(typeof THREE==='undefined'){setTimeout(w,300);return;}
-  var L=document.getElementById('L'),log='',wheels=[];
-  try{
-    var s=new THREE.Scene();s.background=new THREE.Color(0x0a0a1a);log+='S ';
-    var c=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,20);c.position.set(0,0.5,3);c.lookAt(0,0.4,0);log+='C ';
-    var r=new THREE.WebGLRenderer({antialias:true});r.setPixelRatio(1);r.setSize(innerWidth,innerHeight);document.body.appendChild(r.domElement);log+='R ';
+<!DOCTYPE html><html lang=zh><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>GLB多灯光测试</title>
+<style>*{margin:0;padding:0}body{background:#050508;overflow:hidden}#info{position:fixed;top:10px;left:10px;color:#ff4400;font:12px monospace;z-index:10}</style></head>
+<body><div id=info></div>
 
-    s.add(new THREE.AmbientLight(0x443322,4));
-    s.add(new THREE.DirectionalLight(0xffffff,12)).position.set(0,1.5,5);
-    s.add(new THREE.DirectionalLight(0xff8866,4)).position.set(-1.5,1,2);
+<script type=importmap>
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
 
-    var sk=new THREE.MeshStandardMaterial({color:0xfce4c8,roughness:0.3});
-    var rd=new THREE.MeshStandardMaterial({color:0xdd2222,roughness:0.2});
-    var pn=new THREE.MeshStandardMaterial({color:0x4a4048,roughness:0.45});
-    var gd=new THREE.MeshStandardMaterial({color:0xe6b422,roughness:0.08,metalness:0.9});
+<script type=module>
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    var G=new THREE.Group();s.add(G);
+const info=document.getElementById('info');
+info.innerHTML='⏳ 加载...';
 
-    // 身体
-    G.add((function(){var m=new THREE.Mesh(new THREE.CapsuleGeometry(0.14,0.3,8,10),rd);m.position.set(0,0.5,0);return m;})());log+='体 ';
-    // 头
-    G.add((function(){var m=new THREE.Mesh(new THREE.SphereGeometry(0.19,24,24),sk);m.position.set(0,0.98,0);return m;})());log+='头 ';
-    // 腿
-    for(var i=-1;i<=1;i+=2){
-      G.add((function(){var m=new THREE.Mesh(new THREE.CapsuleGeometry(0.055,0.22,6,8),pn);m.position.set(i*0.08,0.27,0);return m;})());
-      G.add((function(){var m=new THREE.Mesh(new THREE.CapsuleGeometry(0.048,0.2,6,8),pn);m.position.set(i*0.08,0.05,0);return m;})());
-    }
-    log+='腿 ';
-    // 手臂
-    for(var i=-1;i<=1;i+=2){
-      G.add((function(){var m=new THREE.Mesh(new THREE.CapsuleGeometry(0.042,0.2,8,10),sk);m.position.set(i*0.2,0.58,i*0.04);return m;})());
-    }
-    log+='臂 ';
-    // 风火轮
-    for(var i=-1;i<=1;i+=2){
-      var wh=new THREE.Group();
-      wh.add(new THREE.Mesh(new THREE.TorusGeometry(0.1,0.03,10,18),gd));
-      wh.position.set(i*0.1,-0.14,0.05);G.add(wh);wheels.push(wh);
-    }
-    log+='轮 ';
+try{
+  const gltf=await new Promise((ok,err)=>{new GLTFLoader().load('nezha.glb',ok,undefined,err)});
 
-    G.rotation.y=Math.PI;
-    L.innerHTML=log+'OK!';
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0x050508);scene.fog=new THREE.Fog(0x050508,2,10);
+  const cam=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,10);cam.position.set(0,0.5,2.2);cam.lookAt(0,0.4,0);
+  const R=new THREE.WebGLRenderer({antialias:true,powerPreference:'low-power'});R.setPixelRatio(Math.min(devicePixelRatio,1.5));R.setSize(innerWidth,innerHeight);
+  document.body.appendChild(R.domElement);
 
-    setTimeout(function(){L.style.opacity=0},3000);
+  // 多灯光测试
+  scene.add(new THREE.AmbientLight(0x221111,1.5));
+  scene.add(new THREE.DirectionalLight(0xffcc88,10)).position.set(2,2.5,3);
+  scene.add(new THREE.DirectionalLight(0xff4422,3)).position.set(-1,0.5,-0.5);
+  scene.add(new THREE.PointLight(0xff4400,8,3)).position.set(0,0.6,1.5);
 
-    (function loop(t){
-      requestAnimationFrame(loop);
-      G.position.y=Math.abs(Math.sin(t*0.003))*0.01;
-      G.rotation.z=Math.sin(t*0.003)*0.04;
-      for(var i=0;i<wheels.length;i++)wheels[i].rotation.x+=0.18;
-      r.render(s,c);
-    })();
-  }catch(e){L.innerHTML=log+'❌'+e.message}
-})();
+  gltf.scene.traverse(function(ch){if(ch.isMesh)ch.material=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.5,metalness:0.1})});
+  gltf.scene.scale.setScalar(2.8);gltf.scene.position.set(0,-0.25,0);gltf.scene.rotation.y=Math.PI;
+  scene.add(gltf.scene);
+
+  let autoR=true,rotY=Math.PI,rotX=0,dist=2.2,lx=0,ly=0,ld=0,tch=false;
+  R.domElement.addEventListener('touchstart',function(e){
+    if(e.touches.length==1){lx=e.touches[0].clientX;ly=e.touches[0].clientY;tch=true;autoR=false}
+    if(e.touches.length==2)ld=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    e.preventDefault();
+  });
+  R.domElement.addEventListener('touchmove',function(e){
+    if(e.touches.length==1&&tch){rotY+=(e.touches[0].clientX-lx)*0.005;rotX+=(e.touches[0].clientY-ly)*0.005;rotX=Math.max(-1,Math.min(1,rotX));lx=e.touches[0].clientX;ly=e.touches[0].clientY}
+    if(e.touches.length==2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);dist*=ld/d;dist=Math.max(1,Math.min(6,dist));ld=d}
+    e.preventDefault();
+  },{passive:false});
+  R.domElement.addEventListener('touchend',function(){tch=false;setTimeout(function(){autoR=true},2000)});
+
+  info.innerHTML='✅ 多灯光渲染中';
+  setTimeout(function(){info.style.opacity='0'},2000);
+
+  (function loop(t){requestAnimationFrame(loop);
+    const st=Math.sin(t*0.003);
+    gltf.scene.position.y=-0.25+Math.abs(st)*0.01;
+    gltf.scene.rotation.z=st*0.04;
+    if(autoR)rotY+=0.005;
+    cam.position.x=Math.sin(rotY)*Math.cos(rotX)*dist;
+    cam.position.y=Math.sin(rotX)*dist+0.5;
+    cam.position.z=Math.cos(rotY)*Math.cos(rotX)*dist;
+    cam.lookAt(0,0.4,0);
+    R.render(scene,cam);
+  })();
+
+  window.addEventListener('resize',function(){cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight)});
+
+}catch(e){info.innerHTML='❌ '+e.message}
 </script></body></html>
