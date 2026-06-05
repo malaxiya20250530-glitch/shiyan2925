@@ -6,42 +6,29 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
-    name: 📱 编译 Android APK
+  build:
+    name: 📱 打包 PWA
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: 📦 缓存 Library
-        uses: actions/cache@v4
-        with:
-          path: ai-desktop-pet/unity_project/Library
-          key: Library-Android-v3-${{ hashFiles('ai-desktop-pet/unity_project/Assets/**') }}
-          restore-keys: Library-Android-v3-
+      - name: 📦 打包灵绘 PWA
+        run: |
+          mkdir -p release/linghui-pwa
+          cp ai-desktop-pet/preview/nezha_dance_viewer.html release/linghui-pwa/index.html
+          cp ai-desktop-pet/preview/manifest.json release/linghui-pwa/
+          cp ai-desktop-pet/preview/sw.js release/linghui-pwa/
+          cp ai-desktop-pet/preview/voice/*.wav release/linghui-pwa/voice/ 2>/dev/null || true
+          cd release && zip -r LingHui-PWA.zip linghui-pwa/
 
-      - name: 🎮 Unity 编译 APK
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          projectPath: ai-desktop-pet/unity_project
-          targetPlatform: Android
-          buildName: LingHui-Nezha
-          buildsPath: build
-          unityVersion: 2022.3.20f1
-          versioning: Semantic
-          androidAppBundle: false
-
-      - name: 📤 上传 APK
+      - name: 📤 上传
         uses: actions/upload-artifact@v4
         with:
-          name: LingHui-Nezha-APK
-          path: build/Android/*.apk
-          retention-days: 30
+          name: LingHui-PWA
+          path: release/LingHui-PWA.zip
+          retention-days: 90
 
       - name: 📋 报告
         run: |
-          APK=$(find build/Android -name "*.apk" 2>/dev/null | head -1)
-          echo "### 🔥 灵绘 APK" >> $GITHUB_STEP_SUMMARY
-          echo "**文件**: $APK ($(du -h "$APK" 2>/dev/null | cut -f1))" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔥 灵绘 PWA" >> $GITHUB_STEP_SUMMARY
+          echo "解压后用 Chrome 打开 index.html → 添加到主屏幕" >> $GITHUB_STEP_SUMMARY

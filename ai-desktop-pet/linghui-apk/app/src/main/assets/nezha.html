@@ -16,11 +16,6 @@ canvas{display:block}
 #title{position:fixed;top:20px;left:20px;font-size:16px;opacity:0.7}
 .loading{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:24px;color:#ff4400}
 </style>
-
-<link rel="manifest" href="manifest.json">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
 </head>
 <body>
 <div id="title">哪吒魔童降世 - 程序化舞蹈引擎</div>
@@ -150,12 +145,6 @@ window.toggleBPM=()=>{const v=[80,100,120,140,160];bpm=v[(v.indexOf(bpm)+1)%v.le
 
 requestAnimationFrame(animate);
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-</script>
-
-<script>
-if('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
-}
 </script>
 </body>
 </html>
