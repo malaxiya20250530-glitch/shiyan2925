@@ -1,36 +1,44 @@
 <!DOCTYPE html><html lang=zh><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>灵绘 AR</title>
 <style>
 *{margin:0;padding:0}body{background:#000;overflow:hidden}
-#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:20px;font-family:sans-serif;z-index:50;text-align:center;pointer-events:none;transition:opacity 1s}
-#btns{position:fixed;bottom:30px;left:0;right:0;display:flex;justify-content:center;gap:12px;z-index:30}
-.btn{padding:12px 24px;background:rgba(255,68,0,0.85);color:#fff;border:none;border-radius:25px;font-size:16px;font-family:sans-serif}
+#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:18px;font-family:sans-serif;z-index:50;text-align:center;pointer-events:none}
+#err{position:fixed;bottom:60px;left:10px;right:10px;color:#f44;font-size:13px;font-family:monospace;z-index:50;text-align:center;word-break:break-all}
 </style></head>
 <body>
-<div id=msg>📱 灵绘 AR<br><small>点屏幕进入</small></div>
-<div id=btns style=display:none>
-  <button class=btn onclick=moveNear()>靠近</button>
-  <button class=btn onclick=moveFar()>远离</button>
-  <button class=btn onclick=rotateLeft()>左转</button>
-  <button class=btn onclick=rotateRight()>右转</button>
-</div>
+<div id=msg>📱 灵绘 AR<br><small>检查设备支持中...</small></div>
+<div id=err></div>
 <script>
-if(!navigator.xr){
-  document.getElementById('msg').innerHTML='❌ 浏览器不支持AR<br><small>请用Chrome</small>';
+var log='';
+function elog(s){log+=s+'<br>';document.getElementById('err').innerHTML=log;console.log(s)}
+
+elog('检测WebXR...');
+if(typeof navigator.xr==='undefined'){
+  document.getElementById('msg').innerHTML='❌ 浏览器不支持XR<br><small>需Chrome M81+</small>';
+  elog('navigator.xr 不存在');
 }else{
+  elog('navigator.xr 存在');
   navigator.xr.isSessionSupported('immersive-ar').then(function(ok){
+    elog('immersive-ar支持: '+ok);
     if(ok){
+      document.getElementById('msg').innerHTML='✅ 支持AR!<br><small>点屏幕进入</small>';
       document.body.addEventListener('click',startAR,{once:true});
       document.body.addEventListener('touchend',function(e){e.preventDefault();startAR()},{once:true});
     }else{
-      document.getElementById('msg').innerHTML='❌ 不支持沉浸式AR<br><small>尝试用Chrome最新版</small>';
+      // 试inline
+      navigator.xr.isSessionSupported('inline').then(function(ok2){
+        elog('inline支持: '+ok2);
+      });
+      document.getElementById('msg').innerHTML='❌ 设备不支持AR<br><small>红米Note13阉割了ARCore</small>';
     }
+  }).catch(function(e){
+    elog('检测失败: '+e.message);
+    document.getElementById('msg').innerHTML='❌ XR检测出错<br><small>'+e.message.substring(0,50)+'</small>';
   });
 }
 </script>
-
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script>
-var scene,cam,R,nezha,session,localSpace;
+var scene,cam,R,nezha;
 
 function buildNezha(){
   var G=new THREE.Group();
@@ -41,7 +49,6 @@ function buildNezha(){
   var gold=new THREE.MeshStandardMaterial({color:0xdaa520,roughness:0.15,metalness:0.95});
   var eyeM=new THREE.MeshStandardMaterial({color:0x000000,roughness:0.05,emissive:0x220000});
   var sashM=new THREE.MeshStandardMaterial({color:0xdd2222,roughness:0.3,emissive:0x220000,side:THREE.DoubleSide});
-
   function M(g,m,x,y,z,rx,ry,rz,sx,sy,sz){
     rx=rx||0;ry=ry||0;rz=rz||0;sx=sx||1;sy=sy||1;sz=sz||1;
     var o=new THREE.Mesh(g,m);o.position.set(x,y,z);o.rotation.set(rx,ry,rz);o.scale.set(sx,sy,sz);o.castShadow=true;return o;
@@ -59,23 +66,6 @@ function buildNezha(){
     var rope=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.008,0.22,8),new THREE.MeshStandardMaterial({color:0xff2222,roughness:0.2,emissive:0x330000}));
     rope.position.set(s*0.18,1.1,-0.05);rope.rotation.set(0.3*s,0,0.1);rope.castShadow=true;G.add(rope);
   }
-  for(var s=-1;s<=1;s+=2){
-    G.add(M(new THREE.CapsuleGeometry(0.045,0.2,8,12),skin,s*0.23,0.8,s*0.05,0.2*s,0,0.3*s));
-    G.add(M(new THREE.CapsuleGeometry(0.038,0.18,8,12),skin,s*0.3,0.58,s*0.08,0.1*s,0,0.2*s));
-    G.add(M(new THREE.SphereGeometry(0.04,8,8),skin,s*0.36,0.4,s*0.1));
-    G.add(M(new THREE.TorusGeometry(0.055,0.018,12,24),gold,s*0.36,0.42,-0.03,Math.PI/3,0,0));
-  }
-  for(var s=-1;s<=1;s+=2){
-    G.add(M(new THREE.CapsuleGeometry(0.055,0.22,6,10),pants,s*0.08,0.35,0));
-    G.add(M(new THREE.CapsuleGeometry(0.048,0.2,6,10),pants,s*0.08,0.1,0));
-    G.add(M(new THREE.BoxGeometry(0.1,0.05,0.15),pants,s*0.08,0.03,0.04));
-  }
-  for(var s=-1;s<=1;s+=2){
-    var sa=new THREE.Mesh(new THREE.TorusGeometry(0.12,0.025,12,32,Math.PI*1.5),sashM);
-    sa.position.set(s*0.25,0.8,0);sa.rotation.set(0.2,0,s*0.3);sa.castShadow=true;G.add(sa);
-    var tail=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.03,0.5,8),sashM);
-    tail.position.set(s*0.35,0.45,0.1);tail.rotation.set(0.5*s,0,0.4*s);tail.castShadow=true;G.add(tail);
-  }
   return G;
 }
 
@@ -84,59 +74,34 @@ function initScene(){
   cam=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,0.01,20);
   R=new THREE.WebGLRenderer({antialias:true,alpha:true});
   R.setPixelRatio(Math.min(devicePixelRatio,2));R.setSize(innerWidth,innerHeight);
-  R.xr.enabled=true;
   document.body.appendChild(R.domElement);
   scene.add(new THREE.AmbientLight(0xffffff,1.5));
-  var sun=new THREE.DirectionalLight(0xffffff,4);sun.position.set(1,2,1);scene.add(sun);
+  scene.add(new THREE.DirectionalLight(0xffffff,4)).position.set(1,2,1);
   nezha=buildNezha();
-  nezha.scale.setScalar(0.3);
+  nezha.scale.setScalar(0.3);nezha.position.set(0,0,-1);
   scene.add(nezha);
 }
 
 async function startAR(){
-  var msg=document.getElementById('msg');
-  msg.innerHTML='⏳ 进入AR...';
   try{
-    session=await navigator.xr.requestSession('immersive-ar',{requiredFeatures:['local']});
-    R.xr.setReferenceSpaceType('local');
+    elog('请求AR session...');
+    var session=await navigator.xr.requestSession('immersive-ar',{});
+    elog('AR session 创建成功!');
+    R.xr.enabled=true;
     await R.xr.setSession(session);
-    localSpace=await session.requestReferenceSpace('local');
-
-    // 哪吒放在前方1米处
-    nezha.position.set(0,0,-1);
-    nezha.visible=true;
-    msg.style.opacity='0';
-    document.getElementById('btns').style.display='flex';
-
-    R.setAnimationLoop(function(t,frame){
-      if(frame){
-        var pose=frame.getViewerPose(localSpace);
-        if(pose){
-          // 轻轻呼吸
-          nezha.position.y=Math.sin(t*0.003)*0.03;
-        }
-      }
-      R.render(scene,cam);
-    });
-
+    elog('session绑定成功');
+    R.setAnimationLoop(function(t,frame){R.render(scene,cam)});
+    document.getElementById('msg').innerHTML='✅ AR已启动';
   }catch(e){
-    msg.innerHTML='❌ AR失败<br><small>'+e.message+'</small>';
-    console.error(e);
+    elog('失败: '+e.message);
+    document.getElementById('msg').innerHTML='❌ AR失败<br><small>'+e.message.substring(0,60)+'</small>';
   }
 }
-
-window.moveNear=function(){nezha.position.z+=0.2};
-window.moveFar=function(){nezha.position.z-=0.2};
-window.rotateLeft=function(){nezha.rotation.y+=0.3};
-window.rotateRight=function(){nezha.rotation.y-=0.3};
 
 initScene();
 function loop(t){
   requestAnimationFrame(loop);
-  if(!R.xr.isPresenting){
-    nezha.rotation.y+=0.005;
-    R.render(scene,cam);
-  }
+  if(R&&!R.xr.isPresenting){nezha.rotation.y+=0.005;R.render(scene,cam)}
 }
 requestAnimationFrame(loop);
 window.addEventListener('resize',function(){cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();R.setSize(innerWidth,innerHeight)});
