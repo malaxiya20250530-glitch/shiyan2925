@@ -1,27 +1,37 @@
 <!DOCTYPE html><html><head><meta charset=UTF-8><meta name=viewport content="width=device-width,initial-scale=1"><title>test</title>
-<style>body{background:#331111;margin:0;overflow:hidden}</style></head>
+<style>body{background:#000;margin:0;overflow:hidden}</style></head>
 <body>
-<div id=L style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;font-size:16px;z-index:9">加载中...</div>
+<div id=L style="position:fixed;top:30px;left:30px;color:#0f0;font-size:16px;z-index:99;pointer-events:none">加载中...</div>
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 <script>
 (function w(){
   if(typeof THREE==='undefined'){setTimeout(w,300);return;}
   var L=document.getElementById('L');
-  L.innerHTML='Three ✅';
+  L.innerHTML='ThreeJS ✅';
   try{
-    var s=new THREE.Scene();s.background=new THREE.Color(0x221111);
-    var c=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,10);
-    c.position.set(0,0,3);
-    var r=new THREE.WebGLRenderer();
+    var s=new THREE.Scene();s.background=new THREE.Color(0x000022);
+    var c=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,20);
+    c.position.set(0,0,3);c.lookAt(0,0,0);
+    var r=new THREE.WebGLRenderer({antialias:true});
     r.setPixelRatio(1);r.setSize(innerWidth,innerHeight);
-    r.domElement.style.position='fixed';r.domElement.style.top='0';r.domElement.style.left='0';
     document.body.appendChild(r.domElement);
-    s.add(new THREE.AmbientLight(0xffffff,2));
-    var d=new THREE.DirectionalLight(0xffffff,5);d.position.set(0,2,3);s.add(d);
-    var m=new THREE.Mesh(new THREE.SphereGeometry(0.4,24,24),new THREE.MeshStandardMaterial({color:0xff4444,roughness:0.3}));
+    // 强光照
+    s.add(new THREE.AmbientLight(0xffffff,3));
+    s.add(new THREE.DirectionalLight(0xffffff,8)).position.set(0,0,5);
+    s.add(new THREE.DirectionalLight(0xffffff,5)).position.set(2,1,1);
+    var m=new THREE.Mesh(
+      new THREE.SphereGeometry(0.5,32,32),
+      new THREE.MeshStandardMaterial({color:0xffaa00,roughness:0.2,metalness:0.6,emissive:0x331100})
+    );
     s.add(m);
-    L.innerHTML='OK!';setTimeout(function(){L.style.opacity=0},2000);
-    (function loop(t){requestAnimationFrame(loop);m.rotation.y+=0.02;m.position.y=Math.sin(t*0.003)*0.3;r.render(s,c)})();
-  }catch(e){L.innerHTML='ERR:'+e.message}
+    L.innerHTML='渲染中...';
+    var fc=0;
+    (function loop(t){
+      requestAnimationFrame(loop);
+      fc++;m.rotation.y+=0.02;m.rotation.x+=0.01;m.position.y=Math.sin(t*0.003)*0.5;
+      r.render(s,c);
+      if(fc%60==0)L.innerHTML='帧:'+fc+' 球@y='+m.position.y.toFixed(2);
+    })();
+  }catch(e){L.innerHTML='❌'+e.message}
 })();
 </script></body></html>
