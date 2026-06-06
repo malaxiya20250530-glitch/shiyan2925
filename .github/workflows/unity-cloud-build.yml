@@ -21,8 +21,7 @@ jobs:
           cp ai-desktop-pet/preview/sw.js release/linghui-pwa/
           cp ai-desktop-pet/preview/voice/*.wav release/linghui-pwa/voice/ 2>/dev/null || true
           cp ai-desktop-pet/preview/music/*.mp3 release/linghui-pwa/music/ 2>/dev/null || true
-          cp ai-desktop-pet/nezha_textured.glb release/linghui-pwa/nezha.glb 2>/dev/null || true
-          cd release && zip -r LingHui-PWA.zip linghui-pwa/
+                    cd release && zip -r LingHui-PWA.zip linghui-pwa/
 
       - name: 📤 上传
         uses: actions/upload-artifact@v4
