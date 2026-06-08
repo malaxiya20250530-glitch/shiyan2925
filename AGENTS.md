@@ -176,3 +176,24 @@ python3 codex_memory.py context
 ## 当前项目记忆
 
 加载自 `.codex/memories/`，内容由 `python3 codex_memory.py memories` 输出。
+
+# Memory Engine
+
+## Project Memory
+读取：
+`.memory/project/`
+
+写入：
+`.memory/project/`
+
+## User Memory
+读取：
+`.memory/user/`
+
+写入：
+`.memory/user/`
+
+## Session Summary
+退出前自动生成：
+
+`.memory/session/latest.md`
