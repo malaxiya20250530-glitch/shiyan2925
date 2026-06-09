@@ -120,11 +120,24 @@ class PetServer:
             personality_hint=personality_hint
         )
 
+        # 安全过滤：确保回复不超出角色设定
+        reply = self._sanitize_reply(reply)
+
         # 4. 记录到记忆
         self.memory.add_message("user", content)
         self.memory.add_message("assistant", reply)
 
         # 5. 构建响应
+        # 获取最近关键记忆
+        recent_memories = []
+        try:
+            lt = self.memory.get_long_term_context()
+            if lt:
+                # 提取记忆摘要（每行一条）
+                recent_memories = [m.strip() for m in lt.split("\n") if m.strip() and not m.strip().startswith("---")][:10]
+        except Exception:
+            pass
+
         response = {
             "type": "pet_response",
             "text": reply,
@@ -132,6 +145,7 @@ class PetServer:
             "emotion_values": self.emotion.emotion_values,
             "animation": self.emotion.get_animation_hint(),
             "triggered_emotion": triggered,
+            "memories": recent_memories,
         }
 
         if auto_intent:
@@ -140,6 +154,16 @@ class PetServer:
             response["action_result"] = auto_result
 
         return json.dumps(response, ensure_ascii=False)
+
+    def _sanitize_reply(self, text: str) -> str:
+        """安全过滤：截断过长回复，移除可能的注入风险"""
+        # 限制回复长度
+        max_len = 200
+        if len(text) > max_len:
+            text = text[:max_len] + "..."
+        # 移除可能的代码注入标记
+        text = text.replace("```", "").replace("<script>", "").replace("</script>", "")
+        return text
 
     def _get_status(self) -> str:
         """返回宠物当前状态"""
