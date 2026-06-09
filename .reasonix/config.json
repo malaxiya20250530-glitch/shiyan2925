@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "context": {
+    "recent_threads": 5,
+    "max_execution_memories": 30
+  },
+  "automation": {
+    "tasks": [
+      {
+        "name": "质量门禁（每次改动后）",
+        "cron": "0 */6 * * *",
+        "model": "gpt-5.2",
+        "command": "bash /data/data/com.termux/files/home/quality_gate.sh --ci",
+        "description": "每6小时运行完整质量门禁：语法检查+导入检查+5组测试+扩展测试+代码规范扫描",
+        "enabled": true
+      },
+      {
+        "name": "记忆自动维护",
+        "cron": "0 22 * * 0",
+        "model": "gpt-5.2",
+        "command": "python3 /data/data/com.termux/files/home/codex_memory.py auto-remember",
+        "description": "每周日22:00自动扫描最近会话，提取架构决策/bug教训到记忆库",
+        "enabled": true
+      },
+      {
+        "name": "知识库健康检查",
+        "cron": "0 8 * * 1",
+        "model": "gpt-5.2",
+        "command": "python3 -c \"import sqlite3; c=sqlite3.connect('/data/data/com.termux/files/home/knowledge/fact_store.db'); print(f'事实数: {c.execute(\\\"SELECT COUNT(*) FROM facts\\\").fetchone()[0]}'); c.close()\"",
+        "description": "每周一08:00检查知识库完整性",
+        "enabled": false
+      }
+    ]
+  },
+  "memories": {
+    "auto_save_interval_hours": 6,
+    "max_facts_per_category": 50,
+    "categories": ["architecture", "bug", "tool_usage", "performance", "decision"]
+  }
+}

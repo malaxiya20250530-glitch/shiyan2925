@@ -24,3 +24,20 @@ Thumbs.db
 *.tmp
 *.log
 .bash_history
+
+# === 🔐 密钥与敏感配置（第04课 - API密钥管理）===
+.env.local
+.env
+*.key
+*.pem
+
+# === 知识库大文件 ===
+knowledge/fact_store.db
+
+# === 会话记录 ===
+.codex/sessions/
+.codex/log/
+.codex/shell_snapshots/
+
+# === 记忆运行时文件 ===
+.memory/session/

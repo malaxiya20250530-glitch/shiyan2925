@@ -1,0 +1,40 @@
+# ========== 顶级配置（必须在任何 [section] 之前） ==========
+model_provider = "mimo2codex"
+model = "deepseek-v4-pro"
+model_context_window = 1000000
+model_max_output_tokens = 393216
+approval_policy = "never"          # ✅ 移到这里
+sandbox = "workspace-write"        # ✅ 移到这里
+approvals_reviewer = "user"
+
+# ========== Provider 配置 ==========
+[model_providers.mimo2codex]
+name = "DeepSeek"
+base_url = "http://127.0.0.1:8788/v1"
+wire_api = "responses"
+requires_openai_auth = true
+request_max_retries = 1
+
+# ========== 项目信任设置 ==========
+[projects."/data/data/com.termux/files/home"]
+trust_level = "trusted"
+
+[tui.model_availability_nux]
+"gpt-5.5" = 4
+
+[plugins."file-upload@personal"]
+enabled = true
+
+[notice]
+hide_full_access_warning = true
+
+# ========== MCP 服务器配置（第05课 - 连接 MCP） ==========
+[mcp_servers.github]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-github"]
+env.GITHUB_PERSONAL_ACCESS_TOKEN = "${GITHUB_TOKEN:-from-gh-cli}"
+
+[mcp_servers.memory]
+command = "python3"
+args = ["/data/data/com.termux/files/home/codex_mcp_memory.py"]
+description = "跨会话记忆读写：remember/forget/context"
